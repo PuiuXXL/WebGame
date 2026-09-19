@@ -2,7 +2,8 @@
   min-height: 100vh;
   display: grid;
   place-content: center;
-  gap: 0.5rem;
+  justify-items: center;
+  gap: 0.75rem;
   padding: 2rem;
   text-align: center;
 }
@@ -14,4 +15,151 @@
 
 .page p {
   color: #aeb4c0;
+}
+
+.controller-qr {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.controller-qr h2 {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.controller-qr__code {
+  display: flex;
+  max-width: 100%;
+  padding: 0.75rem;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.controller-qr__code svg {
+  width: min(280px, 70vw);
+  height: auto;
+}
+
+.controller-qr__url {
+  max-width: min(34rem, 90vw);
+  overflow-wrap: anywhere;
+  color: #9fc3ff;
+}
+
+.game-page {
+  align-content: center;
+}
+
+.game-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(2rem, 6vw, 5rem);
+  width: min(70rem, 100%);
+}
+
+.game-header .controller-qr {
+  margin-top: 0;
+}
+
+.connection-status {
+  font-weight: 700;
+}
+
+.connection-status--connected {
+  color: #75e6a4 !important;
+}
+
+.connection-status--connecting {
+  color: #ffd479 !important;
+}
+
+.connection-status--disconnected,
+.connection-status--error,
+.error-message {
+  color: #ff8a8a !important;
+}
+
+.input-monitor {
+  display: grid;
+  gap: 1rem;
+  width: min(44rem, 100%);
+  margin-top: 1.5rem;
+}
+
+.input-monitor h2 {
+  margin: 0;
+}
+
+.input-state-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.input-state {
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+  border: 1px solid #343946;
+  border-radius: 0.75rem;
+  background: #1b1f27;
+}
+
+.input-state--active {
+  border-color: #75e6a4;
+  background: #173528;
+  box-shadow: 0 0 1.25rem rgb(117 230 164 / 20%);
+}
+
+.last-input,
+.controller-output {
+  color: #cbd2df;
+}
+
+.controller-page {
+  user-select: none;
+}
+
+.controller-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(8rem, 12rem));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.controller-button {
+  min-height: 6rem;
+  border: 2px solid #536079;
+  border-radius: 1rem;
+  color: #f7f7f7;
+  background: #202632;
+  font: inherit;
+  font-size: 1.1rem;
+  font-weight: 800;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.controller-button--pressed {
+  border-color: #75e6a4;
+  background: #236440;
+  transform: scale(0.97);
+}
+
+@media (max-width: 760px) {
+  .game-header {
+    flex-direction: column;
+  }
+
+  .input-state-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .controller-grid {
+    grid-template-columns: repeat(2, minmax(7rem, 1fr));
+    width: 100%;
+  }
 }
