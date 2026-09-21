@@ -72,16 +72,30 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 		}
 
 		if connectedClient.role != RoleController {
-			connectedClient.enqueue(errorMessage("role_not_allowed", errors.New("only the controller can send input")))
+			connectedClient.enqueue(errorMessage("role_not_allowed", errors.New("only the controller can send commands")))
 			continue
 		}
 
-		if err := message.ValidateInput(); err != nil {
-			connectedClient.enqueue(errorMessage("invalid_message", err))
+		var forwarded Message
+		switch message.Type {
+		case MessageTypeInput:
+			if err := message.ValidateInput(); err != nil {
+				connectedClient.enqueue(errorMessage("invalid_message", err))
+				continue
+			}
+			forwarded = Message{Type: MessageTypeInput, Key: message.Key, Pressed: message.Pressed}
+		case MessageTypeInputReset:
+			if err := message.ValidateInputReset(); err != nil {
+				connectedClient.enqueue(errorMessage("invalid_message", err))
+				continue
+			}
+			forwarded = Message{Type: MessageTypeInputReset}
+		default:
+			connectedClient.enqueue(errorMessage("invalid_message", errors.New("unrecognized message type")))
 			continue
 		}
 
-		if err := handler.hub.forwardInput(connectedClient, message); err != nil {
+		if err := handler.hub.forwardInput(connectedClient, forwarded); err != nil {
 			connectedClient.enqueue(errorMessage("input_not_forwarded", err))
 		}
 	}

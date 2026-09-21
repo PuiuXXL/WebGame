@@ -18,7 +18,8 @@ const (
 
 	InputKeyLeft   InputKey = "left"
 	InputKeyRight  InputKey = "right"
-	InputKeyJump   InputKey = "jump"
+	InputKeyUp     InputKey = "up"
+	InputKeyDown   InputKey = "down"
 	InputKeyAction InputKey = "action"
 )
 
@@ -60,9 +61,19 @@ func (message Message) ValidateInput() error {
 	return nil
 }
 
+func (message Message) ValidateInputReset() error {
+	if message.Type != MessageTypeInputReset {
+		return fmt.Errorf("message type must be %q", MessageTypeInputReset)
+	}
+	if message.Key != "" || message.Pressed != nil || message.Role != "" || message.Status != "" || message.Code != "" || message.Message != "" {
+		return fmt.Errorf("input_reset must not contain other fields")
+	}
+	return nil
+}
+
 func isValidInputKey(key InputKey) bool {
 	switch key {
-	case InputKeyLeft, InputKeyRight, InputKeyJump, InputKeyAction:
+	case InputKeyLeft, InputKeyRight, InputKeyUp, InputKeyDown, InputKeyAction:
 		return true
 	default:
 		return false

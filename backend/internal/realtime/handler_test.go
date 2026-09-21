@@ -45,6 +45,9 @@ func TestHandlerForwardsInputFromControllerToGame(t *testing.T) {
 	if input.Type != MessageTypeInput || input.Key != InputKeyRight || input.Pressed == nil || !*input.Pressed {
 		t.Fatalf("game received %#v, want right pressed", input)
 	}
+
+	writeTestMessage(t, contextWithTimeout, controller, Message{Type: MessageTypeInputReset})
+	assertMessageType(t, readTestMessage(t, contextWithTimeout, game), MessageTypeInputReset)
 }
 
 func dialTestClient(t *testing.T, ctx context.Context, url string) *websocket.Conn {

@@ -31,8 +31,9 @@ func TestValidateInput(t *testing.T) {
 		message Message
 		wantErr bool
 	}{
-		{name: "valid", message: Message{Type: MessageTypeInput, Key: InputKeyJump, Pressed: &pressed}},
-		{name: "unknown key", message: Message{Type: MessageTypeInput, Key: "up", Pressed: &pressed}, wantErr: true},
+		{name: "up", message: Message{Type: MessageTypeInput, Key: InputKeyUp, Pressed: &pressed}},
+		{name: "down", message: Message{Type: MessageTypeInput, Key: InputKeyDown, Pressed: &pressed}},
+		{name: "old jump key", message: Message{Type: MessageTypeInput, Key: "jump", Pressed: &pressed}, wantErr: true},
 		{name: "missing pressed", message: Message{Type: MessageTypeInput, Key: InputKeyLeft}, wantErr: true},
 		{name: "wrong type", message: Message{Type: MessageTypeStatus, Key: InputKeyLeft, Pressed: &pressed}, wantErr: true},
 	}
@@ -44,5 +45,15 @@ func TestValidateInput(t *testing.T) {
 				t.Fatalf("ValidateInput() error = %v, wantErr %v", err, test.wantErr)
 			}
 		})
+	}
+}
+
+func TestValidateInputReset(t *testing.T) {
+	pressed := true
+	if err := (Message{Type: MessageTypeInputReset}).ValidateInputReset(); err != nil {
+		t.Fatalf("valid input_reset rejected: %v", err)
+	}
+	if err := (Message{Type: MessageTypeInputReset, Pressed: &pressed}).ValidateInputReset(); err == nil {
+		t.Fatal("input_reset with pressed field was accepted")
 	}
 }
