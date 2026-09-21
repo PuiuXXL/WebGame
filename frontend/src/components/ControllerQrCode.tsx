@@ -6,8 +6,7 @@ type ControllerQrCodeProps = {
 
 export function ControllerQrCode({ url }: ControllerQrCodeProps) {
   return (
-    <section className="controller-qr" aria-labelledby="controller-qr-title">
-      <h2 id="controller-qr-title">Conectează telefonul</h2>
+    <section className="controller-qr" aria-label="Cod QR pentru controller">
       <div className="controller-qr__code">
         <QRCodeSVG
           value={url}
@@ -17,9 +16,6 @@ export function ControllerQrCode({ url }: ControllerQrCodeProps) {
           title="Scanează pentru a deschide controllerul jocului"
         />
       </div>
-      <a className="controller-qr__url" href={url}>
-        {url}
-      </a>
     </section>
   )
 }

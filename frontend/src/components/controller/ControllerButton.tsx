@@ -39,12 +39,14 @@ export function ControllerButton({
 
   return (
     <button
-      className={`controller-button${pressed ? ' controller-button--pressed' : ''}`}
+      className={`controller-button controller-button--${inputKey}${pressed ? ' controller-button--pressed' : ''}`}
       type="button"
+      aria-label={inputKey.toUpperCase()}
       onPointerDown={press}
       onPointerUp={release}
       onPointerCancel={release}
       onLostPointerCapture={release}
+      onDragStart={(event) => event.preventDefault()}
       onContextMenu={(event) => event.preventDefault()}
     >
       {label}

@@ -49,5 +49,9 @@ export function useRealtimeClient(
     return clientRef.current?.sendInput(key, pressed) ?? false
   }, [])
 
-  return { status, protocolError, sendInput }
+  const sendInputReset = useCallback(() => {
+    return clientRef.current?.sendInputReset() ?? false
+  }, [])
+
+  return { status, protocolError, sendInput, sendInputReset }
 }

@@ -1,4 +1,4 @@
-export const INPUT_KEYS = ['left', 'right', 'jump', 'action'] as const
+export const INPUT_KEYS = ['left', 'right', 'up', 'down', 'action'] as const
 
 export type InputKey = (typeof INPUT_KEYS)[number]
 export type ClientRole = 'game' | 'controller'
@@ -36,7 +36,8 @@ export function createEmptyInputState(): InputState {
   return {
     left: false,
     right: false,
-    jump: false,
+    up: false,
+    down: false,
     action: false,
   }
 }

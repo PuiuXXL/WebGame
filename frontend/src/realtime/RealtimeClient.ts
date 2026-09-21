@@ -81,6 +81,15 @@ export class RealtimeClient {
     return true
   }
 
+  sendInputReset() {
+    if (this.socket?.readyState !== WebSocket.OPEN) {
+      return false
+    }
+
+    this.socket.send(JSON.stringify({ type: 'input_reset' }))
+    return true
+  }
+
   disconnect() {
     const socket = this.socket
     this.socket = null

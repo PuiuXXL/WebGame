@@ -25,7 +25,7 @@ export function ControllerPage() {
     }
   }, [])
 
-  const { status, protocolError, sendInput } = useRealtimeClient(
+  const { status, protocolError, sendInput, sendInputReset } = useRealtimeClient(
     'controller',
     handleServerMessage,
   )
@@ -35,6 +35,10 @@ export function ControllerPage() {
       if (pressed) {
         activeInputsRef.current.add(key)
       } else {
+        if (!activeInputsRef.current.has(key)) {
+          setInputs((currentInputs) => ({ ...currentInputs, [key]: false }))
+          return
+        }
         activeInputsRef.current.delete(key)
       }
 
@@ -46,9 +50,7 @@ export function ControllerPage() {
 
   useEffect(() => {
     function releaseAllInputs() {
-      for (const key of activeInputsRef.current) {
-        sendInput(key, false)
-      }
+      sendInputReset()
       activeInputsRef.current.clear()
       setInputs(createEmptyInputState())
     }
@@ -65,7 +67,7 @@ export function ControllerPage() {
       window.removeEventListener('blur', releaseAllInputs)
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [sendInput])
+  }, [sendInputReset])
 
   return (
     <main className="page controller-page">
@@ -76,18 +78,23 @@ export function ControllerPage() {
 
       <section className="controller-grid" aria-label="Game controller">
         <ControllerButton
+          inputKey="up"
+          label="▲"
+          onInputChange={handleInputChange}
+        />
+        <ControllerButton
           inputKey="left"
-          label="LEFT"
+          label="◀"
+          onInputChange={handleInputChange}
+        />
+        <ControllerButton
+          inputKey="down"
+          label="▼"
           onInputChange={handleInputChange}
         />
         <ControllerButton
           inputKey="right"
-          label="RIGHT"
-          onInputChange={handleInputChange}
-        />
-        <ControllerButton
-          inputKey="jump"
-          label="JUMP"
+          label="▶"
           onInputChange={handleInputChange}
         />
         <ControllerButton
