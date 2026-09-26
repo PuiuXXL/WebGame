@@ -25,3 +25,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# blueprint renders
+scripts/out/
+
+# backup scris de editorul de harta
+src/game/campus.layout.ts.bak

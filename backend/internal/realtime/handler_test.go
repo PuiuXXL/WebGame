@@ -25,12 +25,23 @@ func TestHandlerForwardsInputFromControllerToGame(t *testing.T) {
 	writeTestMessage(t, contextWithTimeout, game, Message{Type: MessageTypeJoin, Role: RoleGame})
 	assertMessageType(t, readTestMessage(t, contextWithTimeout, game), MessageTypeStatus)
 
+	session := readTestMessage(t, contextWithTimeout, game)
+	if session.Type != MessageTypeSession || session.Session == "" {
+		t.Fatalf("game session message = %#v, want a non-empty pairing code", session)
+	}
+
 	controller := dialTestClient(t, contextWithTimeout, websocketURL)
 	defer controller.CloseNow()
-	writeTestMessage(t, contextWithTimeout, controller, Message{Type: MessageTypeJoin, Role: RoleController})
+	writeTestMessage(t, contextWithTimeout, controller, Message{
+		Type:    MessageTypeJoin,
+		Role:    RoleController,
+		Session: session.Session,
+	})
 	assertMessageType(t, readTestMessage(t, contextWithTimeout, controller), MessageTypeStatus)
+
+	assertMessageType(t, readTestMessage(t, contextWithTimeout, game), MessageTypeInputReset)
 	controllerStatus := readTestMessage(t, contextWithTimeout, game)
-	if controllerStatus.Status != "controller_connected" {
+	if controllerStatus.Status != StatusControllerConnected {
 		t.Fatalf("game status = %q, want controller_connected", controllerStatus.Status)
 	}
 
@@ -44,6 +55,63 @@ func TestHandlerForwardsInputFromControllerToGame(t *testing.T) {
 	input := readTestMessage(t, contextWithTimeout, game)
 	if input.Type != MessageTypeInput || input.Key != InputKeyRight || input.Pressed == nil || !*input.Pressed {
 		t.Fatalf("game received %#v, want right pressed", input)
+	}
+}
+
+func TestHandlerRejectsControllerWithoutTheCurrentPairingCode(t *testing.T) {
+	server := httptest.NewServer(NewHandler(NewHub(), []string{"example.com"}))
+	defer server.Close()
+
+	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	contextWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	game := dialTestClient(t, contextWithTimeout, websocketURL)
+	defer game.CloseNow()
+	writeTestMessage(t, contextWithTimeout, game, Message{Type: MessageTypeJoin, Role: RoleGame})
+	assertMessageType(t, readTestMessage(t, contextWithTimeout, game), MessageTypeStatus)
+	assertMessageType(t, readTestMessage(t, contextWithTimeout, game), MessageTypeSession)
+
+	controller := dialTestClient(t, contextWithTimeout, websocketURL)
+	defer controller.CloseNow()
+	writeTestMessage(t, contextWithTimeout, controller, Message{
+		Type:    MessageTypeJoin,
+		Role:    RoleController,
+		Session: "a-code-from-a-previous-game",
+	})
+
+	var ignored Message
+	err := wsjson.Read(contextWithTimeout, controller, &ignored)
+	if err == nil {
+		t.Fatal("controller with a stale pairing code was accepted")
+	}
+	if status := websocket.CloseStatus(err); status != websocket.StatusPolicyViolation {
+		t.Fatalf("close status = %v, want %v", status, websocket.StatusPolicyViolation)
+	}
+}
+
+func TestHandlerRotatesThePairingCodeOnRequest(t *testing.T) {
+	server := httptest.NewServer(NewHandler(NewHub(), []string{"example.com"}))
+	defer server.Close()
+
+	websocketURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	contextWithTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	game := dialTestClient(t, contextWithTimeout, websocketURL)
+	defer game.CloseNow()
+	writeTestMessage(t, contextWithTimeout, game, Message{Type: MessageTypeJoin, Role: RoleGame})
+	assertMessageType(t, readTestMessage(t, contextWithTimeout, game), MessageTypeStatus)
+	first := readTestMessage(t, contextWithTimeout, game)
+
+	writeTestMessage(t, contextWithTimeout, game, Message{Type: MessageTypeNewSession})
+	second := readTestMessage(t, contextWithTimeout, game)
+
+	if second.Type != MessageTypeSession || second.Session == "" {
+		t.Fatalf("rotation response = %#v, want a session message", second)
+	}
+	if first.Session == second.Session {
+		t.Fatal("new_session returned the same pairing code")
 	}
 }
 

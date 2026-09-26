@@ -8,10 +8,11 @@ import type { ClientRole, InputKey, ServerMessage } from './protocol'
 export function useRealtimeClient(
   role: ClientRole,
   onMessage: (message: ServerMessage) => void,
+  session: string | null = null,
 ) {
-  const [status, setStatus] =
-    useState<RealtimeConnectionStatus>('connecting')
+  const [status, setStatus] = useState<RealtimeConnectionStatus>('connecting')
   const [protocolError, setProtocolError] = useState<string | null>(null)
+  const [rejectionReason, setRejectionReason] = useState<string | null>(null)
   const clientRef = useRef<RealtimeClient | null>(null)
   const messageHandlerRef = useRef(onMessage)
 
@@ -21,33 +22,55 @@ export function useRealtimeClient(
 
   useEffect(() => {
     let active = true
-    const client = new RealtimeClient(role, {
-      onMessage: (message) => messageHandlerRef.current(message),
-      onStatusChange: (nextStatus) => {
-        if (active) {
-          setStatus(nextStatus)
-        }
+    const client = new RealtimeClient(
+      role,
+      {
+        onMessage: (message) => messageHandlerRef.current(message),
+        onStatusChange: (nextStatus) => {
+          if (active) {
+            setStatus(nextStatus)
+          }
+        },
+        onProtocolError: (message) => {
+          if (active) {
+            setProtocolError(message)
+          }
+        },
+        onRejected: (reason) => {
+          if (active) {
+            setRejectionReason(reason)
+          }
+        },
       },
-      onProtocolError: (message) => {
-        if (active) {
-          setProtocolError(message)
-        }
-      },
-    })
+      session,
+    )
 
     clientRef.current = client
     client.connect()
 
+    function handleVisibilityChange() {
+      if (!document.hidden) {
+        client.reconnectNow()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
     return () => {
       active = false
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
       clientRef.current = null
       client.disconnect()
     }
-  }, [role])
+  }, [role, session])
 
   const sendInput = useCallback((key: InputKey, pressed: boolean) => {
     return clientRef.current?.sendInput(key, pressed) ?? false
   }, [])
 
-  return { status, protocolError, sendInput }
+  const requestNewSession = useCallback(() => {
+    return clientRef.current?.requestNewSession() ?? false
+  }, [])
+
+  return { status, protocolError, rejectionReason, sendInput, requestNewSession }
 }

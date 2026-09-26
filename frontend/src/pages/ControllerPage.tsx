@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ControllerButton } from '../components/controller/ControllerButton'
 import {
   createEmptyInputState,
@@ -10,25 +11,39 @@ import { useRealtimeClient } from '../realtime/useRealtimeClient'
 const statusLabels = {
   connecting: 'Se conectează…',
   connected: 'Conectat',
-  disconnected: 'Deconectat',
+  disconnected: 'Reconectare…',
   error: 'Eroare de conexiune',
+  rejected: 'Cod expirat',
 } as const
 
 export function ControllerPage() {
+  const [searchParams] = useSearchParams()
+  // The pairing code arrives in the QR link and never changes for this page load.
+  const session = useMemo(() => searchParams.get('s'), [searchParams])
+
   const [inputs, setInputs] = useState(createEmptyInputState)
+  const [gameConnected, setGameConnected] = useState(false)
   const [serverMessage, setServerMessage] = useState<string | null>(null)
   const activeInputsRef = useRef(new Set<InputKey>())
 
   const handleServerMessage = useCallback((message: ServerMessage) => {
     if (message.type === 'error') {
       setServerMessage(message.message)
+      return
+    }
+    if (message.type === 'status') {
+      if (message.status === 'game_connected') setGameConnected(true)
+      if (message.status === 'game_disconnected') setGameConnected(false)
     }
   }, [])
 
-  const { status, protocolError, sendInput } = useRealtimeClient(
+  const { status, protocolError, rejectionReason, sendInput } = useRealtimeClient(
     'controller',
     handleServerMessage,
+    session,
   )
+
+  const live = status === 'connected'
 
   const handleInputChange = useCallback(
     (key: InputKey, pressed: boolean) => {
@@ -67,39 +82,99 @@ export function ControllerPage() {
     }
   }, [sendInput])
 
+  if (!session) {
+    return (
+      <main className="page controller-page">
+        <div className="controller-blocker">
+          <h1>Scanează codul QR</h1>
+          <p>
+            Această pagină trebuie deschisă prin codul QR de pe ecranul jocului.
+            Linkul trebuie să conțină codul de asociere.
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  if (status === 'rejected') {
+    return (
+      <main className="page controller-page">
+        <div className="controller-blocker controller-blocker--error">
+          <h1>Cod expirat</h1>
+          <p>{rejectionReason ?? 'Codul de asociere nu mai este valid.'}</p>
+          <p>Scanează din nou codul QR afișat pe ecranul jocului.</p>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="page controller-page">
-      <h1>Controller</h1>
-      <p className={`connection-status connection-status--${status}`}>
-        Realtime: {statusLabels[status]}
-      </p>
+      <header className="controller-header">
+        <span className={`connection-status connection-status--${status}`}>
+          {statusLabels[status]}
+        </span>
+        <span className="controller-header__game">
+          {gameConnected ? 'Joc conectat' : 'Se așteaptă jocul…'}
+        </span>
+      </header>
 
-      <section className="controller-grid" aria-label="Game controller">
-        <ControllerButton
-          inputKey="left"
-          label="LEFT"
-          onInputChange={handleInputChange}
-        />
-        <ControllerButton
-          inputKey="right"
-          label="RIGHT"
-          onInputChange={handleInputChange}
-        />
-        <ControllerButton
-          inputKey="jump"
-          label="JUMP"
-          onInputChange={handleInputChange}
-        />
+      <section className="gamepad" aria-label="Controller joc">
+        <div className="dpad">
+          <ControllerButton
+            inputKey="up"
+            label="SUS"
+            glyph="▲"
+            variant="direction"
+            disabled={!live}
+            onInputChange={handleInputChange}
+          />
+          <ControllerButton
+            inputKey="left"
+            label="STÂNGA"
+            glyph="◀"
+            variant="direction"
+            disabled={!live}
+            onInputChange={handleInputChange}
+          />
+          <div className="dpad__center" aria-hidden="true" />
+          <ControllerButton
+            inputKey="right"
+            label="DREAPTA"
+            glyph="▶"
+            variant="direction"
+            disabled={!live}
+            onInputChange={handleInputChange}
+          />
+          <ControllerButton
+            inputKey="down"
+            label="JOS"
+            glyph="▼"
+            variant="direction"
+            disabled={!live}
+            onInputChange={handleInputChange}
+          />
+        </div>
+
         <ControllerButton
           inputKey="action"
-          label="ACTION"
+          label="ACȚIUNE"
+          glyph="●"
+          variant="action"
+          disabled={!live}
           onInputChange={handleInputChange}
         />
       </section>
 
       <output className="controller-output" aria-live="polite">
-        Active: {activeInputLabels(inputs)}
+        {activeInputLabels(inputs)}
       </output>
+
+      {!live && (
+        <p className="controller-hint">
+          Butoanele sunt blocate până revine conexiunea.
+        </p>
+      )}
 
       {(protocolError || serverMessage) && (
         <p className="error-message">{protocolError || serverMessage}</p>
@@ -113,5 +188,5 @@ function activeInputLabels(inputs: Record<InputKey, boolean>) {
     .filter(([, pressed]) => pressed)
     .map(([key]) => key.toUpperCase())
 
-  return activeInputs.length > 0 ? activeInputs.join(' + ') : 'NONE'
+  return activeInputs.length > 0 ? activeInputs.join(' + ') : '—'
 }

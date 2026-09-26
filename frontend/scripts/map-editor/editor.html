@@ -1,0 +1,1512 @@
+<!doctype html>
+<html lang="ro">
+<head>
+<meta charset="utf-8">
+<title>Editor hartă · Pisica din campus</title>
+<style>
+  :root {
+    --bg: #14171f; --panel: #1c212c; --line: #2c3342; --ink: #e9edf5;
+    --muted: #8c95a8; --accent: #ffcb3d; --ok: #6ee7a0; --bad: #ff7b7b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; background: var(--bg); color: var(--ink);
+    font: 13px/1.45 Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    overflow: hidden;
+  }
+  #side {
+    width: 320px; flex: none; height: 100%; overflow-y: auto;
+    background: var(--panel); border-right: 1px solid var(--line); padding: 14px;
+  }
+  #stage { flex: 1; position: relative; }
+  canvas { display: block; width: 100%; height: 100%; cursor: crosshair; }
+
+  h1 { margin: 0 0 4px; font-size: 16px; }
+  .sub { color: var(--muted); font-size: 11px; margin-bottom: 14px; }
+  fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0 0 12px; padding: 10px; }
+  legend { color: var(--accent); font-size: 11px; font-weight: 800; letter-spacing: .08em;
+           text-transform: uppercase; padding: 0 5px; }
+  label { display: flex; align-items: center; gap: 8px; margin: 5px 0; font-size: 12px; }
+  label > span:first-child { color: var(--muted); min-width: 74px; }
+  input[type=number], input[type=text], select {
+    flex: 1; min-width: 0; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px;
+    background: #121620; color: var(--ink); font: inherit; font-size: 12px;
+  }
+  input[type=range] { flex: 1; min-width: 0; }
+  button {
+    padding: 6px 10px; border: 1px solid var(--line); border-radius: 6px;
+    background: #232a37; color: var(--ink); font: inherit; font-weight: 700;
+    font-size: 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: #3f6b45; border-color: var(--ok); }
+  button.danger { background: #4a2430; border-color: var(--bad); }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .row > button { flex: 1; }
+  #list { max-height: 230px; overflow-y: auto; }
+  .item {
+    padding: 4px 7px; border-radius: 5px; cursor: pointer; font-size: 12px;
+    display: flex; justify-content: space-between; gap: 6px;
+  }
+  .item:hover { background: #262e3d; }
+  .item.sel { background: #37415a; color: #fff; font-weight: 700; }
+  .item small { color: var(--muted); }
+  .item.wing { padding-left: 20px; font-size: 11px; }
+  .item.wing::before { content: '\21b3'; position: absolute; margin-left: -13px; color: var(--muted); }
+  .item { position: relative; }
+  #issues { font-size: 11px; line-height: 1.6; }
+  #issues .bad { color: var(--bad); }
+  #issues .ok { color: var(--ok); }
+  #status {
+    position: absolute; left: 12px; bottom: 12px; padding: 6px 10px; border-radius: 6px;
+    background: rgba(20,23,31,.9); border: 1px solid var(--line); font-size: 12px;
+  }
+  #rename {
+    position: absolute; z-index: 5; padding: 4px 7px; border-radius: 6px;
+    border: 2px solid var(--accent); background: #10141c; color: var(--ink);
+    font: 700 13px Inter, system-ui, sans-serif; min-width: 140px;
+  }
+  #rename[hidden] { display: none; }
+  #drawbar {
+    position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px;
+    background: rgba(20,23,31,.95); border: 1px solid var(--accent);
+    box-shadow: 0 6px 20px rgba(0,0,0,.45); font-size: 12px; white-space: nowrap;
+  }
+  #drawbar[hidden] { display: none; }
+  #drawbar b { color: var(--accent); }
+  #help {
+    position: absolute; right: 12px; bottom: 12px; padding: 8px 11px; border-radius: 6px;
+    background: rgba(20,23,31,.9); border: 1px solid var(--line);
+    font-size: 11px; color: var(--muted); line-height: 1.7; max-width: 290px;
+  }
+  kbd { background: #2b3445; border-radius: 3px; padding: 0 4px; color: var(--ink); }
+</style>
+</head>
+<body>
+<div id="side">
+  <h1>Editor hartă</h1>
+  <div class="sub">Mută obiectele peste fotografie. Salvarea scrie direct în <code>campus.layout.ts</code>.</div>
+
+  <fieldset>
+    <legend>Fundal</legend>
+    <label><span>Imagine</span>
+      <select id="bgPick">
+        <option value="refs/satelit.png">Satelit</option>
+        <option value="refs/plan.png">Planul desenat</option>
+        <option value="refs/osm.png">Hartă OSM</option>
+        <option value="">(fără)</option>
+      </select>
+    </label>
+    <label><span>Opacitate</span><input type="range" id="bgAlpha" min="0" max="100" value="55"></label>
+    <label><span>X</span><input type="number" id="bgX" step="10" value="0"></label>
+    <label><span>Y</span><input type="number" id="bgY" step="10" value="0"></label>
+    <label><span>Scară</span><input type="number" id="bgScale" step="0.01" value="1"></label>
+    <div class="row">
+      <button id="bgFit">Încadrează în lume</button>
+      <button id="bgBehind">Sub/peste</button>
+    </div>
+    <div class="sub" style="margin:8px 0 0">Ține <kbd>Shift</kbd> și trage ca să muți fundalul.</div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Lume</legend>
+    <label><span>Lățime</span><input type="number" id="wW" step="50"></label>
+    <label><span>Înălțime</span><input type="number" id="wH" step="50"></label>
+    <label><span>Snap</span>
+      <select id="snap"><option value="10">10</option><option value="20" selected>20</option>
+      <option value="50">50</option><option value="1">fără</option></select>
+    </label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Straturi</legend>
+    <label><input type="checkbox" id="lFence" checked> <span style="min-width:0">Gard</span></label>
+    <label><input type="checkbox" id="lRoads" checked> <span style="min-width:0">Drumuri</span></label>
+    <label><input type="checkbox" id="lBuildings" checked> <span style="min-width:0">Clădiri</span></label>
+    <label><input type="checkbox" id="lZones" checked> <span style="min-width:0">Zone</span></label>
+    <label><input type="checkbox" id="lForests" checked> <span style="min-width:0">Păduri</span></label>
+    <label><input type="checkbox" id="lStands" checked> <span style="min-width:0">Standuri</span></label>
+    <label><input type="checkbox" id="lGates" checked> <span style="min-width:0">Porți</span></label>
+  </fieldset>
+
+  <fieldset>
+    <legend>Obiecte</legend>
+    <div class="row" style="margin-bottom:8px">
+      <button id="newRoad">+ Drum nou</button><button id="newFence">+ Gard nou</button>
+    </div>
+    <div class="row" style="margin-bottom:8px"><button id="newForest">+ Pădure nouă</button></div>
+    <div id="list"></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Proprietăți</legend>
+    <div id="props"><div class="sub">Nimic selectat.</div></div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Verificare</legend>
+    <div id="issues"></div>
+  </fieldset>
+
+  <div class="row">
+    <button class="primary" id="save">Salvează</button>
+    <button id="reload">Reîncarcă</button>
+  </div>
+  <div class="sub" id="saveMsg" style="margin-top:8px"></div>
+</div>
+
+<div id="stage">
+  <canvas id="c"></canvas>
+  <input id="rename" hidden>
+  <div id="drawbar" hidden>
+    <span><b id="drawWhat">Drum nou</b> · <b id="drawCount">0</b> <span id="drawUnit">vârfuri</span></span>
+    <button id="drawUndo">− ultimul vârf</button>
+    <button class="primary" id="drawDone">Gata</button>
+    <button class="danger" id="drawCancel">Renunță</button>
+  </div>
+  <div id="status">—</div>
+  <div id="help">
+    <kbd>rotiță</kbd> zoom · <kbd>mijloc</kbd> sau <kbd>spațiu</kbd>+trage = pan<br>
+    <kbd>Shift</kbd>+trage = mută fundalul<br>
+    <kbd>+ Drum nou</kbd> / <kbd>+ Gard nou</kbd> apoi clic = vârf; termini de la butoanele de sus<br>
+    <kbd>+ Pădure nouă</kbd> apoi trage un dreptunghi pe hartă<br>
+    <kbd>dublu-clic</kbd> pe un nume = îl rescrii · trage de nume = îl muți<br>
+    <kbd>dublu-clic</kbd> pe un drum = vârf nou · <kbd>clic-dreapta</kbd> pe vârf = șterge<br>
+    trage o aripă = doar aripa · pătratul din centrul blocului = tot blocul<br>
+    bilă albastră = rotește blocul · bilă verde = rotește aripa selectată<br>
+    <kbd>Alt</kbd> = fără snap · <kbd>Ctrl+Z</kbd> undo · <kbd>Ctrl+S</kbd> salvează<br>
+    (scurtături pentru drum: <kbd>Enter</kbd> gata, <kbd>Esc</kbd> renunță)
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let L = null;                        // the layout being edited
+const view = { x: 40, y: 40, z: 0.28 };
+const bg = { img: null, x: 0, y: 0, scale: 1, alpha: 0.55, behind: true };
+let sel = null;                      // { type, i, j }
+let drag = null;
+let drawing = null;                  // { road } while you are laying a new road
+let spaceDown = false;
+const undo = [];
+
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+
+const COLORS = ['#3b6fd4','#e7563f','#41a88a','#f2a93b','#8b5cc7','#e0518f','#2f9fd0',
+                '#d1642c','#5fa83c','#c23b6a','#e8a33d','#4c62c4','#2fa37a','#b8484f'];
+const BUILDING_FILL = { dorm:'#c04a3e', canteen:'#6f7d92', office:'#3d8a80' };
+const ZONE_FILL = { pitch:'#2f7a3a', calisthenics:'#8d4a30', cinema:'#3a5c2c', parking:'#3b414b' };
+const FOREST_FILL = '#1e4423';
+
+const STAND_W = 240, STAND_H = 146, STAND_REACH = 13, WALL = 34;
+
+// ---------------------------------------------------------------------------
+// Coordinate helpers
+// ---------------------------------------------------------------------------
+const toScreenX = x => x * view.z + view.x;
+const toScreenY = y => y * view.z + view.y;
+const toWorldX = x => (x - view.x) / view.z;
+const toWorldY = y => (y - view.y) / view.z;
+const snapV = v => { const s = +$('snap').value; return s <= 1 ? Math.round(v) : Math.round(v / s) * s; };
+
+function resize() {
+  cv.width = cv.clientWidth * devicePixelRatio;
+  cv.height = cv.clientHeight * devicePixelRatio;
+  ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  draw();
+}
+addEventListener('resize', resize);
+
+// ---------------------------------------------------------------------------
+// Load / save
+// ---------------------------------------------------------------------------
+async function load() {
+  L = await (await fetch('/api/layout')).json();
+  $('wW').value = L.world.width;
+  $('wH').value = L.world.height;
+  sel = null;
+  fitView();
+  rebuildList();
+  draw();
+}
+
+function pushUndo() {
+  undo.push(JSON.stringify(L));
+  if (undo.length > 60) undo.shift();
+}
+
+async function save() {
+  if (drawing) finishLine();          // never write a line that has one point
+  const r = await fetch('/api/layout', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(L),
+  });
+  const msg = $('saveMsg');
+  if (r.ok) {
+    msg.textContent = 'Salvat în campus.layout.ts la ' + new Date().toLocaleTimeString();
+    msg.style.color = 'var(--ok)';
+  } else {
+    msg.textContent = 'Eroare la salvare.';
+    msg.style.color = 'var(--bad)';
+  }
+}
+
+function fitView() {
+  const pad = 46;
+  view.z = Math.min((cv.clientWidth - pad*2) / L.world.width,
+                    (cv.clientHeight - pad*2) / L.world.height);
+  view.x = pad;
+  view.y = (cv.clientHeight - L.world.height*view.z) / 2;
+}
+
+// ---------------------------------------------------------------------------
+// Geometry
+// ---------------------------------------------------------------------------
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+function standRect(s) { return { x: s.x - STAND_W/2, y: s.y - STAND_H, width: STAND_W, height: STAND_H }; }
+
+// Buildings can be rotated, so their footprint is a polygon. These mirror
+// rotateAround / buildingPivot / buildingPolygons / polygonsOverlap in campus.ts.
+function rotVec(x, y, deg) {
+  if (!deg) return [x, y];
+  const r = deg * Math.PI/180, co = Math.cos(r), si = Math.sin(r);
+  return [x*co - y*si, x*si + y*co];
+}
+function rotPt(x, y, cx, cy, deg) {
+  const [dx, dy] = rotVec(x - cx, y - cy, deg);
+  return [cx + dx, cy + dy];
+}
+function corners(r) {
+  return [[r.x, r.y], [r.x+r.width, r.y], [r.x+r.width, r.y+r.height], [r.x, r.y+r.height]];
+}
+/** A wing turns about its own centre, before the block turns about its pivot. */
+function partCentre(p) { return { x: p.x + p.width/2, y: p.y + p.height/2 }; }
+function partOutline(p, wall = 0) {
+  const c = partCentre(p);
+  return corners({ x:p.x, y:p.y, width:p.width, height:p.height + wall })
+    .map(([x,y]) => rotPt(x, y, c.x, c.y, p.rotation || 0));
+}
+/** Bounding box of the wings once they have their own angles, wall excluded. */
+function boxOf(b) {
+  const pts = b.parts.flatMap(p => partOutline(p));
+  const xs = pts.map(q => q[0]), ys = pts.map(q => q[1]);
+  const x0 = Math.min(...xs), y0 = Math.min(...ys);
+  return { x: x0, y: y0, width: Math.max(...xs)-x0, height: Math.max(...ys)-y0 };
+}
+function pivotOf(b) { const k = boxOf(b); return { x: k.x + k.width/2, y: k.y + k.height/2 }; }
+function buildingPolys() {
+  return L.buildings.flatMap(b => {
+    const c = pivotOf(b);
+    return b.parts.map(p => ({
+      label: b.label,
+      poly: partOutline(p, WALL).map(([x,y]) => rotPt(x, y, c.x, c.y, b.rotation || 0)),
+    }));
+  });
+}
+/**
+ * Where each name is drawn, in world units.
+ *
+ * This mirrors buildingLabelAnchor / zoneLabelAnchor / gateLabelAnchor in
+ * campus.ts, arithmetic for arithmetic. It has to: the editor used to place
+ * names its own way — a building's name at the block centre instead of above
+ * it, a gate's name at an offset that changed with the zoom — so a name lined
+ * up here landed somewhere else in the game, which made the nudge useless.
+ * `sizeInWorld` is the size the game draws it at, so the editor can scale it
+ * the same way.
+ */
+const LABEL_SIZE = { dorm:24, office:21, canteen:21, zone:20, gateMain:20, gateSide:17 };
+
+function buildingTop(b) {
+  const c = pivotOf(b);
+  let top = Infinity;
+  for (const p of b.parts)
+    for (const [, y] of partOutline(p, WALL).map(([x, y]) => rotPt(x, y, c.x, c.y, b.rotation || 0)))
+      top = Math.min(top, y);
+  return top;
+}
+
+function labelAnchor(type, i) {
+  const off = o => (o.labelOffset || [0, 0]);
+  if (type === 'building') {
+    const b = L.buildings[i], d = off(b);
+    return { x: pivotOf(b).x + d[0], y: buildingTop(b) - 14 + d[1],
+             text: b.label, sizeInWorld: LABEL_SIZE[b.kind] || 21 };
+  }
+  if (type === 'zone') {
+    const z = L.zones[i], d = off(z);
+    return { x: z.bounds.x + z.bounds.width/2 + d[0], y: z.bounds.y - 16 + d[1],
+             text: z.label, sizeInWorld: LABEL_SIZE.zone };
+  }
+  if (type === 'gate') {
+    const g = L.gates[i], d = off(g);
+    return { x: g.x + d[0], y: g.y - (g.rotation === 0 ? 118 : 86) + d[1],
+             text: g.label, sizeInWorld: g.main ? LABEL_SIZE.gateMain : LABEL_SIZE.gateSide };
+  }
+  if (type === 'stand') {
+    const st = L.stands[i];
+    return { x: st.x, y: st.y - STAND_H/2, text: st.label, sizeInWorld: 19 };
+  }
+  return null;
+}
+
+/**
+ * Names are drawn at their true world size so placement is faithful, but kept
+ * readable when zoomed out. When the two disagree the anchor dot is the truth.
+ */
+function labelScreenSize(a) {
+  return Math.max(9, Math.min(40, a.sizeInWorld * view.z));
+}
+
+/** Screen-space boxes of the names drawn this frame, for hit testing. */
+let labelBoxes = [];
+
+/** Every fence side, across every line. Closed lines join back to the start. */
+function fenceSegs() {
+  const out = [];
+  for (const f of L.fence) {
+    const last = f.closed ? f.points.length : f.points.length - 1;
+    for (let i = 0; i < last; i++) out.push([f.points[i], f.points[(i+1) % f.points.length]]);
+  }
+  return out;
+}
+
+/** Where a wing's own rotate grip sits, in world units: off its left edge. */
+function partGrip(b, j) {
+  const p = b.parts[j], pc = partCentre(p), c = pivotOf(b);
+  const [lx, ly] = rotPt(p.x - 22/view.z, pc.y, pc.x, pc.y, p.rotation || 0);
+  return rotPt(lx, ly, c.x, c.y, b.rotation || 0);
+}
+/** Separating-axis test; touching edges do not count as an overlap. */
+function polysOverlap(a, b) {
+  for (const poly of [a, b]) {
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i], q = poly[(i+1) % poly.length];
+      const ax = -(q[1]-p[1]), ay = q[0]-p[0];
+      const span = pts => {
+        let lo = Infinity, hi = -Infinity;
+        for (const [x,y] of pts) { const v = x*ax + y*ay; lo = Math.min(lo,v); hi = Math.max(hi,v); }
+        return [lo, hi];
+      };
+      const [loA, hiA] = span(a), [loB, hiB] = span(b);
+      if (hiA <= loB || hiB <= loA) return false;
+    }
+  }
+  return true;
+}
+/** Where the rotate grip sits, in world units. Its offset is constant on screen. */
+function rotateGrip(b) {
+  const c = pivotOf(b), k = boxOf(b);
+  return rotPt(c.x, k.y - 26/view.z, c.x, c.y, b.rotation || 0);
+}
+function distSeg(x, y, a, b) {
+  const dx = b[0]-a[0], dy = b[1]-a[1], l2 = dx*dx + dy*dy;
+  if (!l2) return Math.hypot(x-a[0], y-a[1]);
+  const t = Math.max(0, Math.min(1, ((x-a[0])*dx + (y-a[1])*dy) / l2));
+  return Math.hypot(x - (a[0]+t*dx), y - (a[1]+t*dy));
+}
+function distRoad(x, y, r) {
+  let best = Infinity;
+  for (let i = 0; i < r.points.length-1; i++) best = Math.min(best, distSeg(x, y, r.points[i], r.points[i+1]));
+  return best;
+}
+
+/** Same rules as npm run map:check, so the editor never lets you save something it would reject. */
+function issues() {
+  const out = [];
+  const brs = buildingPolys();
+  for (let i = 0; i < L.stands.length; i++) {
+    for (let j = i+1; j < L.stands.length; j++)
+      if (rectsOverlap(standRect(L.stands[i]), standRect(L.stands[j])))
+        out.push(`${L.stands[i].label} ⟷ ${L.stands[j].label}`);
+    for (const b of brs)
+      if (polysOverlap(corners(standRect(L.stands[i])), b.poly)) out.push(`${L.stands[i].label} ⟷ ${b.label}`);
+    for (const z of L.zones)
+      if (rectsOverlap(standRect(L.stands[i]), z.bounds)) out.push(`${L.stands[i].label} ⟷ ${z.label}`);
+  }
+  for (let i = 0; i < brs.length; i++) {
+    for (let j = i+1; j < brs.length; j++)
+      if (brs[i].label !== brs[j].label && polysOverlap(brs[i].poly, brs[j].poly))
+        out.push(`${brs[i].label} ⟷ ${brs[j].label}`);
+    for (const z of L.zones)
+      if (polysOverlap(brs[i].poly, corners(z.bounds))) out.push(`${brs[i].label} ⟷ ${z.label}`);
+  }
+  for (const s of L.stands) {
+    for (const r of L.roads)
+      if (distRoad(s.x, s.y - STAND_REACH, r) < STAND_REACH*2)
+        out.push(`${s.label} stă pe axul ${r.id}`);
+    const near = Math.min(...L.roads.map(r => distRoad(s.x, s.y, r) - r.width/2));
+    if (near > 120) out.push(`${s.label} e izolat (${Math.round(near)}px de orice drum)`);
+  }
+  for (const [kind, list] of [['drum', L.roads], ['stand', L.stands],
+                              ['clădire', L.buildings], ['zonă', L.zones], ['poartă', L.gates]]) {
+    const seen = new Set();
+    for (const o of list) {
+      if (seen.has(o.id)) out.push(`două obiecte „${kind}” au id-ul „${o.id}”`);
+      seen.add(o.id);
+    }
+  }
+  for (const r of L.roads) {
+    if (r.points.length < 2) out.push(`drumul „${r.id}” are sub 2 vârfuri`);
+  }
+  for (const f of L.fence) {
+    if (f.points.length < 2) out.push(`gardul „${f.label}” are sub 2 vârfuri`);
+  }
+  for (const g of L.gates) {
+    let on = false;
+    let best = Infinity;
+    for (const f of fenceSegs()) best = Math.min(best, distSeg(g.x, g.y, f[0], f[1]));
+    on = best <= 220;   // in a wall, or standing in a gap between two walls
+    if (!on) out.push(`poarta „${g.label}” e la ${Math.round(best)}px de orice gard`);
+  }
+  return [...new Set(out)];
+}
+
+// ---------------------------------------------------------------------------
+// Drawing
+// ---------------------------------------------------------------------------
+function draw() {
+  if (!L) return;
+  labelBoxes = [];
+  const W = cv.clientWidth, H = cv.clientHeight;
+  ctx.fillStyle = '#0d0f14';
+  ctx.fillRect(0, 0, W, H);
+
+  const drawBg = () => {
+    if (!bg.img || !bg.alpha) return;
+    ctx.save();
+    ctx.globalAlpha = bg.alpha;
+    ctx.drawImage(bg.img, toScreenX(bg.x), toScreenY(bg.y),
+      bg.img.width * bg.scale * view.z, bg.img.height * bg.scale * view.z);
+    ctx.restore();
+  };
+
+  // world plate
+  ctx.fillStyle = '#182016';
+  ctx.fillRect(toScreenX(0), toScreenY(0), L.world.width*view.z, L.world.height*view.z);
+  if (bg.behind) drawBg();
+
+  // grid
+  ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1;
+  ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.font = '10px monospace';
+  for (let x = 0; x <= L.world.width; x += 500) {
+    ctx.beginPath(); ctx.moveTo(toScreenX(x), toScreenY(0)); ctx.lineTo(toScreenX(x), toScreenY(L.world.height)); ctx.stroke();
+    ctx.fillText(x, toScreenX(x)+2, toScreenY(0)-4);
+  }
+  for (let y = 0; y <= L.world.height; y += 500) {
+    ctx.beginPath(); ctx.moveTo(toScreenX(0), toScreenY(y)); ctx.lineTo(toScreenX(L.world.width), toScreenY(y)); ctx.stroke();
+    ctx.fillText(y, toScreenX(0)-32, toScreenY(y)-3);
+  }
+
+  // forests — scenery outside the fence, so they go under everything
+  if ($('lForests').checked) for (const [fi, f] of (L.forests || []).entries()) {
+    const b = f.bounds;
+    ctx.fillStyle = FOREST_FILL;
+    ctx.fillRect(toScreenX(b.x), toScreenY(b.y), b.width*view.z, b.height*view.z);
+    ctx.fillStyle = 'rgba(150,220,150,.5)';
+    const step = Math.max(10, 55*view.z);
+    for (let gx = toScreenX(b.x) + step/2; gx < toScreenX(b.x + b.width); gx += step)
+      for (let gy = toScreenY(b.y) + step/2; gy < toScreenY(b.y + b.height); gy += step) {
+        ctx.beginPath(); ctx.arc(gx, gy, Math.max(1.2, 3*view.z), 0, 7); ctx.fill();
+      }
+    outline(b, sel && sel.type === 'forest' && sel.i === fi);
+    label(f.label, b.x + b.width/2, b.y + 26/view.z, '#bfe3bf', 12, true);
+  }
+
+  // roads
+  if ($('lRoads').checked) for (const [ri, r] of L.roads.entries()) {
+    if (!r.points.length) continue;                 // a road still being drawn
+    ctx.strokeStyle = r.surface === 'asphalt' ? '#4a5260' : '#6d6350';
+    ctx.lineWidth = r.width * view.z; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    r.points.forEach((p, i) => i ? ctx.lineTo(toScreenX(p[0]), toScreenY(p[1]))
+                                 : ctx.moveTo(toScreenX(p[0]), toScreenY(p[1])));
+    ctx.stroke();
+    const isSel = sel && sel.type === 'road' && sel.i === ri;
+    ctx.lineWidth = 1; ctx.strokeStyle = isSel ? '#ffcb3d' : 'rgba(255,255,255,.2)';
+    ctx.stroke();
+    for (const [pi, p] of r.points.entries()) handle(p[0], p[1], isSel && sel.j === pi ? '#ffcb3d' : '#cbb38a');
+    const mid = r.points[Math.floor(r.points.length/2)];
+    label(r.id, mid[0], mid[1] - r.width/2 - 8, '#c9bb9a', 10);
+  }
+
+  // zones
+  if ($('lZones').checked) for (const [zi, z] of L.zones.entries()) {
+    const b = z.bounds;
+    ctx.fillStyle = ZONE_FILL[z.kind] || '#444';
+    ctx.fillRect(toScreenX(b.x), toScreenY(b.y), b.width*view.z, b.height*view.z);
+    outline(b, sel && sel.type === 'zone' && sel.i === zi);
+    const za = labelAnchor('zone', zi);
+    label(za.text, za.x, za.y, '#e8f0e0', labelScreenSize(za), true, { type:'zone', i:zi });
+  }
+
+  // buildings - drawn inside their own rotated frame, so the wings, the door
+  // and the resize grip all turn with the block the way the game draws it.
+  if ($('lBuildings').checked) for (const [bi, b] of L.buildings.entries()) {
+    const c = pivotOf(b), rot = b.rotation || 0;
+    const onBlock = sel && sel.type === 'building' && sel.i === bi;
+    const lx = x => (x - c.x) * view.z, ly = y => (y - c.y) * view.z;
+
+    ctx.save();
+    ctx.translate(toScreenX(c.x), toScreenY(c.y));
+    ctx.rotate(rot * Math.PI/180);
+
+    for (const [pi, p] of b.parts.entries()) {
+      // Nested frame: the wing's own angle on top of the block's.
+      const pc = partCentre(p);
+      ctx.save();
+      if (p.rotation) {
+        ctx.translate(lx(pc.x), ly(pc.y));
+        ctx.rotate(p.rotation * Math.PI/180);
+        ctx.translate(-lx(pc.x), -ly(pc.y));
+      }
+
+      ctx.fillStyle = BUILDING_FILL[b.kind] || '#999';
+      ctx.fillRect(lx(p.x), ly(p.y), p.width*view.z, p.height*view.z);
+      ctx.fillStyle = 'rgba(244,232,210,.55)';
+      ctx.fillRect(lx(p.x), ly(p.y + p.height), p.width*view.z, WALL*view.z);
+
+      const on = onBlock && sel.j === pi;
+      ctx.strokeStyle = on ? '#ffcb3d' : 'rgba(0,0,0,.65)';
+      ctx.lineWidth = on ? 2.5 : 1.5;
+      ctx.strokeRect(lx(p.x), ly(p.y), p.width*view.z, p.height*view.z);
+
+      if (on) {
+        localHandle(lx(p.x + p.width), ly(p.y + p.height), '#ffcb3d', 5);
+        // The wing's own rotate grip, out to its left so it never sits under
+        // the block grip above.
+        const gx = lx(p.x) - 22, gy = ly(pc.y);
+        ctx.strokeStyle = '#6ee7a8'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(lx(p.x), gy); ctx.lineTo(gx, gy); ctx.stroke();
+        ctx.beginPath(); ctx.arc(gx, gy, 6, 0, 7);
+        ctx.fillStyle = '#6ee7a8'; ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 1; ctx.stroke();
+      }
+      ctx.restore();
+    }
+    localHandle(lx(b.door.x), ly(b.door.y), '#7fd0ff', 4);
+
+    // Wings may stand well apart, so when the block is selected a dashed tether
+    // shows which ones belong to it.
+    if (onBlock && b.parts.length > 1) {
+      ctx.save();
+      ctx.setLineDash([4, 4]);
+      ctx.strokeStyle = 'rgba(255,203,61,.5)'; ctx.lineWidth = 1;
+      for (const q of b.parts) {
+        const qc = partCentre(q);
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(lx(qc.x), ly(qc.y)); ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    const top = ly(boxOf(b).y);
+    ctx.strokeStyle = onBlock ? '#ffcb3d' : 'rgba(255,255,255,.3)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, top); ctx.lineTo(0, top - 26); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, top - 26, 6, 0, 7);
+    ctx.fillStyle = onBlock ? '#ffcb3d' : '#9fb4d8'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 1; ctx.stroke();
+
+    // Grab handle for the whole block, so moving it needs no modifier key.
+    localHandle(0, 0, onBlock ? '#ffcb3d' : '#9fb4d8', 5);
+    ctx.restore();
+
+    // The name stays upright: a rotated label is harder to read, not prettier.
+    const spins = b.parts.map(q => q.rotation || 0);
+    const ba = labelAnchor('building', bi);
+    label(b.label + (rot ? `  ${rot}°` : '') + (spins.some(v => v) ? `  [${spins.join('/')}]` : ''),
+      ba.x, ba.y, '#fff', labelScreenSize(ba), true, { type:'building', i:bi });
+  }
+
+  // stands
+  if ($('lStands').checked) for (const [si, s] of L.stands.entries()) {
+    const r = standRect(s);
+    ctx.fillStyle = COLORS[s.color % COLORS.length]; ctx.globalAlpha = .85;
+    ctx.fillRect(toScreenX(r.x), toScreenY(r.y), r.width*view.z, r.height*view.z);
+    ctx.globalAlpha = 1;
+    outline(r, sel && sel.type === 'stand' && sel.i === si);
+    const sa = labelAnchor('stand', si);
+    label(sa.text, sa.x, sa.y, '#fff', labelScreenSize(sa), true, { type:'stand', i:si });
+    handle(s.x, s.y, '#fff', 3);
+  }
+
+  // fence — several independent walls, each open or closed
+  if ($('lFence').checked) for (const [fi, f] of L.fence.entries()) {
+    if (!f.points.length) continue;
+    const onLine = sel && sel.type === 'fence' && sel.i === fi;
+    ctx.strokeStyle = onLine ? '#ffe9a8' : '#d8cba8';
+    ctx.lineWidth = Math.max(2, 16*view.z); ctx.lineJoin = 'round'; ctx.lineCap = 'butt';
+    ctx.beginPath();
+    f.points.forEach((q,i) => i ? ctx.lineTo(toScreenX(q[0]), toScreenY(q[1]))
+                                : ctx.moveTo(toScreenX(q[0]), toScreenY(q[1])));
+    if (f.closed) ctx.closePath();
+    ctx.stroke();
+
+    // An open wall has two ends; mark them, because a gap is deliberate and
+    // you want to see exactly where the wall stops.
+    if (!f.closed && f.points.length > 1) {
+      for (const end of [f.points[0], f.points[f.points.length-1]]) {
+        ctx.beginPath(); ctx.arc(toScreenX(end[0]), toScreenY(end[1]), 5, 0, 7);
+        ctx.fillStyle = '#ff9f5a'; ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 1; ctx.stroke();
+      }
+    }
+    for (const [i, q] of f.points.entries())
+      handle(q[0], q[1], onLine && sel.j === i ? '#ffcb3d' : '#d8cba8');
+    label(f.label, f.points[0][0], f.points[0][1] - 14/view.z, '#e8dcc0', 11);
+  }
+
+  // gates + spawn
+  if ($('lGates').checked) for (const [gi, g] of L.gates.entries()) {
+    ctx.strokeStyle = g.main ? '#ff4d4d' : '#4dff88';
+    ctx.lineWidth = sel && sel.type === 'gate' && sel.i === gi ? 4 : 2.5;
+    ctx.beginPath(); ctx.arc(toScreenX(g.x), toScreenY(g.y), Math.max(7, g.opening/2*view.z), 0, 7); ctx.stroke();
+    const ga = labelAnchor('gate', gi);
+    label(ga.text, ga.x, ga.y, g.main ? '#ff9f9f' : '#9fffc0', labelScreenSize(ga), true,
+      { type:'gate', i:gi });
+  }
+  ctx.fillStyle = '#ffd84d';
+  ctx.beginPath(); ctx.arc(toScreenX(L.spawn.x), toScreenY(L.spawn.y), 7, 0, 7); ctx.fill();
+  label('START', L.spawn.x + 18/view.z, L.spawn.y + 4/view.z, '#ffd84d', 11);
+
+  // Rubber band from the last placed point to the cursor.
+  if (drawing && drawing.cursor && drawing.kind !== 'forest') {
+    const pts = drawing.target.points;
+    ctx.save();
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = '#ffcb3d'; ctx.lineWidth = 1.5;
+    if (pts.length) {
+      const last = pts[pts.length-1];
+      ctx.beginPath();
+      ctx.moveTo(toScreenX(last[0]), toScreenY(last[1]));
+      ctx.lineTo(toScreenX(drawing.cursor[0]), toScreenY(drawing.cursor[1]));
+      ctx.stroke();
+    }
+    ctx.restore();
+    handle(drawing.cursor[0], drawing.cursor[1], '#ffcb3d', 4);
+  }
+
+  if (!bg.behind) drawBg();
+  renderIssues();
+}
+
+function outline(r, selected) {
+  ctx.strokeStyle = selected ? '#ffcb3d' : 'rgba(0,0,0,.65)';
+  ctx.lineWidth = selected ? 2.5 : 1.5;
+  ctx.strokeRect(toScreenX(r.x), toScreenY(r.y), r.width*view.z, r.height*view.z);
+  if (selected) handle(r.x + r.width, r.y + r.height, '#ffcb3d', 5);
+}
+function handle(x, y, color, size = 4) {
+  localHandle(toScreenX(x), toScreenY(y), color, size);
+}
+/** The same grip, at coordinates already in the current canvas transform. */
+function localHandle(x, y, color, size = 4) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x-size, y-size, size*2, size*2);
+  ctx.strokeStyle = 'rgba(0,0,0,.7)'; ctx.lineWidth = 1;
+  ctx.strokeRect(x-size, y-size, size*2, size*2);
+}
+function label(text, x, y, color, size, center, owner) {
+  ctx.font = `700 ${size}px Inter, system-ui, sans-serif`;
+  ctx.textAlign = center ? 'center' : 'left';
+  const sx = toScreenX(x), sy = toScreenY(y);
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,.8)';
+  ctx.strokeText(text, sx, sy);
+  ctx.fillStyle = color;
+  ctx.fillText(text, sx, sy);
+
+  if (owner) {
+    // The text may be scaled for legibility, so mark the true anchor.
+    ctx.fillStyle = 'rgba(255,203,61,.85)';
+    ctx.fillRect(sx - 1.5, sy - 1.5, 3, 3);
+
+    const w = ctx.measureText(text).width;
+    labelBoxes.push({
+      ...owner,
+      x: center ? sx - w/2 - 4 : sx - 4,
+      y: sy - size - 3,
+      w: w + 8,
+      h: size + 8,
+    });
+    const on = sel && sel.type === owner.type && sel.i === owner.i;
+    if (on) {
+      ctx.strokeStyle = 'rgba(255,203,61,.6)'; ctx.lineWidth = 1;
+      const box = labelBoxes[labelBoxes.length-1];
+      ctx.strokeRect(box.x, box.y, box.w, box.h);
+    }
+  }
+  ctx.textAlign = 'left';
+}
+
+function renderIssues() {
+  const list = issues();
+  $('issues').innerHTML = list.length
+    ? list.map(t => `<div class="bad">✗ ${t}</div>`).join('')
+    : '<div class="ok">✓ nicio suprapunere</div>';
+}
+
+// ---------------------------------------------------------------------------
+// New roads
+// ---------------------------------------------------------------------------
+/** Snapped unless Alt is held, same rule as dragging. */
+function placePoint(wx, wy, free) {
+  return free ? [Math.round(wx), Math.round(wy)] : [snapV(wx), snapV(wy)];
+}
+
+/** The draw toolbar is the control surface: no keyboard needed to finish. */
+function refreshDrawbar() {
+  const bar = $('drawbar');
+  bar.hidden = !drawing;
+  for (const [id, name] of [['newRoad', '+ Drum nou'], ['newFence', '+ Gard nou'],
+                            ['newForest', '+ Pădure nouă']]) {
+    $(id).disabled = !!drawing;
+    $(id).textContent = drawing ? 'Se desenează…' : name;
+  }
+  if (!drawing) return;
+
+  const WHAT = { road:'Drum nou', fence:'Gard nou', forest:'Pădure nouă' };
+  $('drawWhat').textContent = WHAT[drawing.kind];
+  $('drawUnit').textContent = drawing.kind === 'forest'
+    ? '— trage un dreptunghi pe hartă'
+    : 'vârfuri — clic pe hartă ca să pui următorul';
+
+  // A forest is dragged out in one gesture, so it counts corners, not vertices.
+  if (drawing.kind === 'forest') {
+    const b = drawing.target && drawing.target.bounds;
+    $('drawCount').textContent = b ? `${Math.round(b.width)}×${Math.round(b.height)}` : 'trage pe hartă';
+    $('drawUndo').disabled = true;
+    $('drawDone').disabled = !b || b.width < 40 || b.height < 40;
+    $('drawDone').textContent = 'Gata';
+    return;
+  }
+
+  const count = drawing.target.points.length;
+  $('drawUndo').disabled = count === 0;
+  $('drawDone').disabled = count < 2;
+  $('drawDone').textContent = count < 2 ? 'Gata (min. 2)' : 'Gata';
+}
+
+/** Roads and fences are both polylines, so one tool draws either. */
+/** Forests are rectangles, so they are dragged out rather than clicked vertex by vertex. */
+function startForest() {
+  if (drawing) finishLine();
+  drawing = { kind: 'forest', target: null, cursor: null, from: null };
+  cv.style.cursor = 'crosshair';
+  refreshDrawbar(); draw();
+}
+
+function endForest(keep) {
+  const made = drawing && drawing.target;
+  drawing = null;
+  cv.style.cursor = 'crosshair';
+  if (made && (!keep || made.bounds.width < 40 || made.bounds.height < 40)) {
+    L.forests.splice(L.forests.indexOf(made), 1);
+    sel = null;
+  } else if (made) {
+    sel = { type:'forest', i: L.forests.indexOf(made), j: null };
+  }
+  refreshDrawbar(); showProps(); rebuildList(); draw();
+}
+
+function startLine(kind) {
+  if (drawing) finishLine();
+  pushUndo();
+
+  let n = 1;
+  let target;
+  if (kind === 'road') {
+    while (L.roads.some(r => r.id === 'drum-' + n)) n++;
+    target = { id: 'drum-' + n, points: [], width: 110, surface: 'paved' };
+    L.roads.push(target);
+    sel = { type:'road', i: L.roads.length - 1, j: null };
+  } else {
+    while (L.fence.some(f => f.id === 'gard-' + n)) n++;
+    target = { id: 'gard-' + n, label: 'Gard ' + n, points: [], closed: false };
+    L.fence.push(target);
+    sel = { type:'fence', i: L.fence.length - 1, j: null };
+  }
+
+  drawing = { kind, target, cursor: null };
+  cv.style.cursor = 'copy';
+  refreshDrawbar(); showProps(); rebuildList(); draw();
+}
+
+function endLine(keep) {
+  if (!drawing || drawing.kind === 'forest') return;
+  const { kind, target } = drawing;
+  // A double-click lands two points on the same spot; drop the repeat.
+  target.points = target.points.filter(
+    (q, i, all) => i === 0 || q[0] !== all[i-1][0] || q[1] !== all[i-1][1]);
+
+  const list = kind === 'road' ? L.roads : L.fence;
+  const index = list.indexOf(target);
+  drawing = null;
+  cv.style.cursor = 'crosshair';
+
+  if (!keep || target.points.length < 2) {
+    list.splice(index, 1);
+    sel = null;
+  } else {
+    sel = { type: kind, i: index, j: null };
+  }
+  refreshDrawbar(); showProps(); rebuildList(); draw();
+}
+const finishLine = () => (drawing && drawing.kind === 'forest' ? endForest(true) : endLine(true));
+const cancelLine = () => (drawing && drawing.kind === 'forest' ? endForest(false) : endLine(false));
+const startRoad = () => startLine('road');
+const startFence = () => startLine('fence');
+
+// ---------------------------------------------------------------------------
+// Hit testing
+// ---------------------------------------------------------------------------
+function hit(wx, wy) {
+  const g = 9 / view.z;   // grab radius in world units
+
+  // Names are drawn over everything, so they are grabbed first. Dragging one
+  // moves the name; a plain click still selects the thing it belongs to.
+  const sx = toScreenX(wx), sy = toScreenY(wy);
+  for (let i = labelBoxes.length - 1; i >= 0; i--) {
+    const box = labelBoxes[i];
+    if (sx >= box.x && sx <= box.x + box.w && sy >= box.y && sy <= box.y + box.h) {
+      // A stand's name is painted on its banner, so it moves with the stand.
+      if (box.type === 'stand') return { type:'stand', i: box.i, mode:'move' };
+      return { type: box.type, i: box.i, j: null, mode:'label' };
+    }
+  }
+
+  if ($('lFence').checked)
+    for (const [i,f] of L.fence.entries())
+      for (const [j,q] of f.points.entries())
+        if (Math.hypot(wx-q[0], wy-q[1]) < g) return { type:'fence', i, j, mode:'move' };
+
+  if ($('lGates').checked)
+    for (const [i,gt] of L.gates.entries())
+      if (Math.hypot(wx-gt.x, wy-gt.y) < g*1.4) return { type:'gate', i, mode:'move' };
+
+  if (Math.hypot(wx-L.spawn.x, wy-L.spawn.y) < g*1.4) return { type:'spawn', mode:'move' };
+
+  if ($('lRoads').checked)
+    for (const [i,r] of L.roads.entries())
+      for (const [j,p] of r.points.entries())
+        if (Math.hypot(wx-p[0], wy-p[1]) < g) return { type:'road', i, j, mode:'move' };
+
+  if ($('lStands').checked)
+    for (let i = L.stands.length-1; i >= 0; i--) {
+      const s = L.stands[i], r = standRect(s);
+      if (wx > r.x && wx < r.x+r.width && wy > r.y && wy < r.y+r.height)
+        return { type:'stand', i, mode:'move' };
+    }
+
+  if ($('lBuildings').checked)
+    for (let i = L.buildings.length-1; i >= 0; i--) {
+      const b = L.buildings[i];
+      const grip = rotateGrip(b);
+      if (Math.hypot(wx-grip[0], wy-grip[1]) < g*1.4) return { type:'building', i, j:0, mode:'rotate' };
+
+      // The selected wing's own grip, checked first so it wins over the body.
+      if (sel && sel.type === 'building' && sel.i === i && sel.j != null) {
+        const pg = partGrip(b, sel.j);
+        if (Math.hypot(wx-pg[0], wy-pg[1]) < g*1.4)
+          return { type:'building', i, j:sel.j, mode:'rotate-part' };
+      }
+
+      // Undo the block rotation, then each wing undoes its own: after that
+      // everything below is an ordinary box test.
+      const c = pivotOf(b);
+      const [bx, by] = rotPt(wx, wy, c.x, c.y, -(b.rotation || 0));
+      if (Math.hypot(bx-b.door.x, by-b.door.y) < g) return { type:'door', i, mode:'move' };
+      if (Math.hypot(bx-c.x, by-c.y) < g) return { type:'building', i, j:sel && sel.type==='building' && sel.i===i ? sel.j : 0, mode:'move-block' };
+      for (let j = b.parts.length-1; j >= 0; j--) {
+        const p = b.parts[j], pc = partCentre(p);
+        const [px, py] = rotPt(bx, by, pc.x, pc.y, -(p.rotation || 0));
+        if (Math.hypot(px-(p.x+p.width), py-(p.y+p.height)) < g)
+          return { type:'building', i, j, mode:'resize' };
+        if (px > p.x && px < p.x+p.width && py > p.y && py < p.y+p.height+WALL)
+          return { type:'building', i, j, mode:'move' };
+      }
+    }
+
+  if ($('lZones').checked)
+    for (let i = L.zones.length-1; i >= 0; i--) {
+      const b = L.zones[i].bounds;
+      if (Math.hypot(wx-(b.x+b.width), wy-(b.y+b.height)) < g) return { type:'zone', i, mode:'resize' };
+      if (wx > b.x && wx < b.x+b.width && wy > b.y && wy < b.y+b.height) return { type:'zone', i, mode:'move' };
+    }
+
+  if ($('lRoads').checked)
+    for (const [i,r] of L.roads.entries())
+      if (distRoad(wx, wy, r) < r.width/2) return { type:'road', i, j:null, mode:'none' };
+
+  if ($('lForests').checked)
+    for (let i = (L.forests || []).length-1; i >= 0; i--) {
+      const b = L.forests[i].bounds;
+      if (Math.hypot(wx-(b.x+b.width), wy-(b.y+b.height)) < g) return { type:'forest', i, mode:'resize' };
+      if (wx > b.x && wx < b.x+b.width && wy > b.y && wy < b.y+b.height) return { type:'forest', i, mode:'move' };
+    }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Mouse
+// ---------------------------------------------------------------------------
+cv.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  if (drawing) { finishLine(); return; }
+  const wx = toWorldX(e.offsetX), wy = toWorldY(e.offsetY);
+  const h = hit(wx, wy);
+  if (h && h.type === 'road' && h.j !== null && L.roads[h.i].points.length > 2) {
+    pushUndo(); L.roads[h.i].points.splice(h.j, 1); draw(); rebuildList();
+  } else if (h && h.type === 'fence' && L.fence[h.i].points.length > 2) {
+    pushUndo(); L.fence[h.i].points.splice(h.j, 1); draw(); rebuildList();
+  }
+});
+
+cv.addEventListener('dblclick', e => {
+  if (drawing) { finishLine(); return; }
+  const wx = toWorldX(e.offsetX), wy = toWorldY(e.offsetY);
+
+  const h = hit(wx, wy);
+  if (h && (h.mode === 'label' || h.type === 'stand')) { startRename(h.type, h.i); return; }
+
+  for (const [i,r] of L.roads.entries()) {
+    for (let j = 0; j < r.points.length-1; j++) {
+      if (distSeg(wx, wy, r.points[j], r.points[j+1]) < r.width/2) {
+        pushUndo();
+        r.points.splice(j+1, 0, [snapV(wx), snapV(wy)]);
+        sel = { type:'road', i, j:j+1 }; draw(); showProps(); return;
+      }
+    }
+  }
+  for (const [fi, f] of L.fence.entries()) {
+    const last = f.closed ? f.points.length : f.points.length - 1;
+    for (let i = 0; i < last; i++) {
+      const a = f.points[i], b = f.points[(i+1) % f.points.length];
+      if (distSeg(wx, wy, a, b) < 20/view.z) {
+        pushUndo();
+        f.points.splice(i+1, 0, [snapV(wx), snapV(wy)]);
+        sel = { type:'fence', i: fi, j: i+1 };
+        draw(); showProps(); rebuildList(); return;
+      }
+    }
+  }
+});
+
+cv.addEventListener('pointerdown', e => {
+  cv.setPointerCapture(e.pointerId);
+  const wx = toWorldX(e.offsetX), wy = toWorldY(e.offsetY);
+
+  if (e.button === 1 || spaceDown) { drag = { kind:'pan', sx:e.offsetX, sy:e.offsetY, vx:view.x, vy:view.y }; return; }
+  if (e.shiftKey) { drag = { kind:'bg', sx:wx, sy:wy, ox:bg.x, oy:bg.y }; return; }
+  if (drawing) {
+    if (e.button !== 0) return;
+    if (drawing.kind === 'forest') {
+      pushUndo();
+      if (!L.forests) L.forests = [];
+      let n = 1;
+      while (L.forests.some(f => f.id === 'padure-' + n)) n++;
+      const [px, py] = placePoint(wx, wy, e.altKey);
+      drawing.from = [px, py];
+      drawing.target = { id:'padure-'+n, label:'P\u0103dure ' + n, bounds:{ x:px, y:py, width:0, height:0 } };
+      L.forests.push(drawing.target);
+      sel = { type:'forest', i: L.forests.length-1, j: null };
+      refreshDrawbar(); rebuildList(); draw();
+      return;
+    }
+    drawing.target.points.push(placePoint(wx, wy, e.altKey));
+    refreshDrawbar(); rebuildList(); draw();
+    return;
+  }
+  if (e.button !== 0) return;
+
+  const h = hit(wx, wy);
+  if (!h) { sel = null; showProps(); draw(); return; }
+
+  pushUndo();
+  sel = { type:h.type, i:h.i, j:h.j };
+  drag = { kind:h.mode, h, sx:wx, sy:wy, snapshot:JSON.parse(JSON.stringify(L)) };
+  showProps(); rebuildList(); draw();
+});
+
+cv.addEventListener('pointermove', e => {
+  const wx = toWorldX(e.offsetX), wy = toWorldY(e.offsetY);
+  $('status').textContent =
+    (drawing ? 'DRUM NOU · clic = vârf   ·   ' : '') +
+    `x ${Math.round(wx)} · y ${Math.round(wy)} · zoom ${view.z.toFixed(2)}`;
+  if (drawing) {
+    drawing.cursor = placePoint(wx, wy, e.altKey);
+    if (drawing.kind === 'forest' && drawing.from) {
+      const [ax, ay] = drawing.from, [bx, by] = drawing.cursor;
+      drawing.target.bounds = {
+        x: Math.min(ax, bx), y: Math.min(ay, by),
+        width: Math.abs(bx-ax), height: Math.abs(by-ay),
+      };
+    }
+    refreshDrawbar(); draw(); return;
+  }
+  if (!drag) return;
+
+  if (drag.kind === 'pan') {
+    view.x = drag.vx + (e.offsetX - drag.sx);
+    view.y = drag.vy + (e.offsetY - drag.sy);
+    draw(); return;
+  }
+  if (drag.kind === 'bg') {
+    bg.x = drag.ox + (wx - drag.sx); bg.y = drag.oy + (wy - drag.sy);
+    $('bgX').value = Math.round(bg.x); $('bgY').value = Math.round(bg.y);
+    draw(); return;
+  }
+  if (drag.kind === 'none') return;
+
+  const free = e.altKey;
+  const S = v => free ? Math.round(v) : snapV(v);
+  const dx = wx - drag.sx, dy = wy - drag.sy;
+  const B = drag.snapshot, h = drag.h;
+
+  if (drag.kind === 'label') {
+    // Never snapped to the world grid: a name is nudged by a few pixels
+    // relative to its own shape, and 20-unit steps make that impossible.
+    const key = h.type === 'building' ? 'buildings' : h.type === 'zone' ? 'zones' : 'gates';
+    const was = B[key][h.i].labelOffset || [0, 0];
+    L[key][h.i].labelOffset = [Math.round(was[0] + dx), Math.round(was[1] + dy)];
+    showProps(); draw(); return;
+  }
+
+  if (h.type === 'fence') {
+    L.fence[h.i].points[h.j] = [S(B.fence[h.i].points[h.j][0]+dx), S(B.fence[h.i].points[h.j][1]+dy)];
+  }
+  else if (h.type === 'road') { L.roads[h.i].points[h.j] = [S(B.roads[h.i].points[h.j][0]+dx), S(B.roads[h.i].points[h.j][1]+dy)]; }
+  else if (h.type === 'gate') { L.gates[h.i].x = S(B.gates[h.i].x+dx); L.gates[h.i].y = S(B.gates[h.i].y+dy); }
+  else if (h.type === 'spawn') { L.spawn.x = S(B.spawn.x+dx); L.spawn.y = S(B.spawn.y+dy); }
+  else if (h.type === 'stand') { L.stands[h.i].x = S(B.stands[h.i].x+dx); L.stands[h.i].y = S(B.stands[h.i].y+dy); }
+  else if (h.type === 'door') { L.buildings[h.i].door.x = S(B.buildings[h.i].door.x+dx); L.buildings[h.i].door.y = S(B.buildings[h.i].door.y+dy); }
+  else if (h.type === 'zone' || h.type === 'forest') {
+    const key = h.type === 'zone' ? 'zones' : 'forests';
+    const b = L[key][h.i].bounds, o = B[key][h.i].bounds;
+    if (drag.kind === 'resize') { b.width = Math.max(40, S(o.width+dx)); b.height = Math.max(40, S(o.height+dy)); }
+    else { b.x = S(o.x+dx); b.y = S(o.y+dy); }
+  }
+  else if (h.type === 'building') {
+    const bb = L.buildings[h.i], ob = B.buildings[h.i];
+    const tidy = deg => {
+      const v = free ? Math.round(deg*10)/10 : Math.round(deg);
+      return ((v + 180) % 360 + 360) % 360 - 180;    // keep it in (-180, 180]
+    };
+    const swept = centre =>
+      (Math.atan2(wy - centre.y, wx - centre.x) - Math.atan2(drag.sy - centre.y, drag.sx - centre.x))
+        * 180/Math.PI;
+
+    if (drag.kind === 'rotate') {
+      bb.rotation = tidy((ob.rotation || 0) + swept(pivotOf(ob)));
+    } else if (drag.kind === 'rotate-part') {
+      // The wing spins about its own centre, in world coordinates - the block's
+      // rotation is a constant and cancels out of the swept angle.
+      const piv = pivotOf(ob), pc = partCentre(ob.parts[h.j]);
+      const [wcx, wcy] = rotPt(pc.x, pc.y, piv.x, piv.y, ob.rotation || 0);
+      bb.parts[h.j].rotation = tidy((ob.parts[h.j].rotation || 0) + swept({ x:wcx, y:wcy }));
+    } else {
+      // Parts are stored unrotated, so a drag has to be expressed in the block's
+      // own frame, otherwise a turned building slides off at an angle. A resize
+      // goes one frame deeper still, because width/height run along the wing.
+      const [ldx, ldy] = rotVec(dx, dy, -(bb.rotation || 0));
+      if (drag.kind === 'resize') {
+        const p = bb.parts[h.j], o = ob.parts[h.j];
+        const [rdx, rdy] = rotVec(ldx, ldy, -(p.rotation || 0));
+        p.width = Math.max(40, S(o.width+rdx)); p.height = Math.max(40, S(o.height+rdy));
+      } else if (drag.kind === 'move-block' || e.ctrlKey) {   // the whole block
+        bb.parts.forEach((p, k) => { p.x = S(ob.parts[k].x+ldx); p.y = S(ob.parts[k].y+ldy); });
+        bb.door.x = S(ob.door.x+ldx); bb.door.y = S(ob.door.y+ldy);
+      } else {                                    // just the wing you grabbed
+        const p = bb.parts[h.j], o = ob.parts[h.j];
+        p.x = S(o.x+ldx); p.y = S(o.y+ldy);
+      }
+    }
+  }
+  showProps(); draw();
+});
+
+addEventListener('pointerup', () => {
+  drag = null;
+  if (drawing && drawing.kind === 'forest' && drawing.from) endForest(true);
+});
+
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const wx = toWorldX(e.offsetX), wy = toWorldY(e.offsetY);
+  view.z = Math.max(0.05, Math.min(3, view.z * (e.deltaY < 0 ? 1.12 : 1/1.12)));
+  view.x = e.offsetX - wx*view.z; view.y = e.offsetY - wy*view.z;
+  draw();
+}, { passive:false });
+
+addEventListener('keydown', e => {
+  if (e.code === 'Space') { spaceDown = true; }
+  if (e.key === 'Enter' && drawing) { e.preventDefault(); finishLine(); return; }
+  if (e.key === 'Escape' && drawing) { e.preventDefault(); cancelLine(); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
+  if (e.ctrlKey && e.key.toLowerCase() === 'z' && undo.length) {
+    L = JSON.parse(undo.pop()); rebuildList(); showProps(); draw();
+  }
+});
+addEventListener('keyup', e => { if (e.code === 'Space') spaceDown = false; });
+
+// ---------------------------------------------------------------------------
+// Renaming on the map
+// ---------------------------------------------------------------------------
+let renaming = null;
+
+function listFor(type) {
+  return { building: L.buildings, zone: L.zones, gate: L.gates, stand: L.stands }[type];
+}
+
+function startRename(type, i) {
+  const anchor = labelAnchor(type, i);
+  if (!anchor) return;
+
+  renaming = { type, i };
+  sel = { type, i, j: type === 'building' ? (sel && sel.type==='building' && sel.i===i ? sel.j : 0) : null };
+
+  const box = $('rename');
+  box.hidden = false;
+  box.value = listFor(type)[i].label;
+  box.style.left = Math.round(toScreenX(anchor.x) - 80) + 'px';
+  box.style.top = Math.round(toScreenY(anchor.y) - 26) + 'px';
+  box.focus();
+  box.select();
+  showProps(); rebuildList(); draw();
+}
+
+function commitRename(keep) {
+  if (!renaming) return;
+  const box = $('rename');
+  const { type, i } = renaming;
+  renaming = null;
+  box.hidden = true;
+  if (keep && box.value.trim()) {
+    pushUndo();
+    listFor(type)[i].label = box.value.trim();
+  }
+  cv.focus();
+  showProps(); rebuildList(); draw();
+}
+
+$('rename').addEventListener('keydown', e => {
+  e.stopPropagation();                       // Ctrl+Z here is the input's own
+  if (e.key === 'Enter') { e.preventDefault(); commitRename(true); }
+  if (e.key === 'Escape') { e.preventDefault(); commitRename(false); }
+});
+$('rename').addEventListener('blur', () => commitRename(true));
+
+// ---------------------------------------------------------------------------
+// Sidebar
+// ---------------------------------------------------------------------------
+function rebuildList() {
+  const rows = [];
+  L.buildings.forEach((b,i) => {
+    rows.push({ t:'building', i, name:b.label, tag:b.kind });
+    // Wings are listed only for the building you are working on, so the list
+    // stays short but every wing is reachable by name.
+    if (sel && sel.type === 'building' && sel.i === i && b.parts.length > 1) {
+      b.parts.forEach((p, j) => rows.push({
+        t:'building', i, j, wing:true,
+        name:`aripa ${j+1}`,
+        tag:`${Math.round(p.width)}\u00d7${Math.round(p.height)}${p.rotation ? ' \u00b7 '+p.rotation+'\u00b0' : ''}`,
+      }));
+    }
+  });
+  L.zones.forEach((z,i) => rows.push({ t:'zone', i, name:z.label, tag:z.kind }));
+  L.stands.forEach((s,i) => rows.push({ t:'stand', i, name:s.label, tag:'stand' }));
+  L.roads.forEach((r,i) => rows.push({ t:'road', i, name:r.id, tag:r.surface }));
+  L.gates.forEach((g,i) => rows.push({ t:'gate', i, name:g.label, tag:g.main?'principală':'secundară' }));
+  (L.forests || []).forEach((f,i) => rows.push({ t:'forest', i, name:f.label,
+    tag:`${Math.round(f.bounds.width)}\u00d7${Math.round(f.bounds.height)}` }));
+  L.fence.forEach((f,i) => rows.push({
+    t:'fence', i, name:f.label, tag:`${f.points.length} vf · ${f.closed ? 'închis' : 'deschis'}`,
+  }));
+
+  $('list').innerHTML = rows.map(r => {
+    const on = sel && sel.type === r.t && sel.i === r.i
+      && (!r.wing ? !sel.wingRow : sel.j === r.j && sel.wingRow);
+    return `<div class="item${r.wing ? ' wing':''}${on ? ' sel':''}" data-t="${r.t}" data-i="${r.i}"
+      data-j="${r.j ?? ''}" data-wing="${r.wing ? 1 : ''}">
+       <span>${r.name}</span><small>${r.tag}</small></div>`;
+  }).join('');
+
+  for (const el of $('list').children) {
+    el.onclick = () => {
+      const wing = !!el.dataset.wing;
+      sel = {
+        type: el.dataset.t,
+        i: +el.dataset.i,
+        j: el.dataset.t === 'building' ? (wing ? +el.dataset.j : (sel && sel.type==='building' && sel.i===+el.dataset.i ? sel.j : 0)) : null,
+        wingRow: wing,
+      };
+      centreOn(); showProps(); rebuildList(); draw();
+    };
+  }
+}
+
+function centreOn() {
+  if (!sel) return;
+  let x, y;
+  if (sel.type === 'building') { const p = L.buildings[sel.i].parts[sel.j ?? 0]; x = p.x+p.width/2; y = p.y+p.height/2; }
+  else if (sel.type === 'zone') { const b = L.zones[sel.i].bounds; x = b.x+b.width/2; y = b.y+b.height/2; }
+  else if (sel.type === 'forest') { const b = L.forests[sel.i].bounds; x = b.x+b.width/2; y = b.y+b.height/2; }
+  else if (sel.type === 'stand') { x = L.stands[sel.i].x; y = L.stands[sel.i].y; }
+  else if (sel.type === 'gate') { x = L.gates[sel.i].x; y = L.gates[sel.i].y; }
+  else if (sel.type === 'road') {
+    const p = L.roads[sel.i].points[0];
+    if (!p) return;
+    x = p[0]; y = p[1];
+  }
+  else if (sel.type === 'forest') {
+    const f = L.forests[sel.i], b = f.bounds;
+    box.innerHTML =
+      field('Nume', f.label, v => f.label = v, 'text') +
+      field('X', b.x, v => b.x = v) + field('Y', b.y, v => b.y = v) +
+      field('L\u0103\u021bime', b.width, v => b.width = v) + field('\u00cen\u0103l\u021bime', b.height, v => b.height = v) +
+      `<div class="sub">Decor \u00een afara gardului. N-are coliziune \u2014 gardul e cel care opre\u0219te pisica. Marginile se \u00eenmoaie singure \u00een joc, deci dreptunghiul nu se vede.</div>` +
+      `<div class="row"><button class="danger" id="delForest">\u0218terge p\u0103durea</button></div>`;
+    setTimeout(() => {
+      $('delForest').onclick = () => {
+        pushUndo(); L.forests.splice(sel.i,1); sel=null; showProps(); rebuildList(); draw();
+      };
+    });
+  }
+  else if (sel.type === 'fence') {
+    const p = L.fence[sel.i].points[0];
+    if (!p) return;
+    x = p[0]; y = p[1];
+  }
+  if (x === undefined) return;
+  view.x = cv.clientWidth/2 - x*view.z; view.y = cv.clientHeight/2 - y*view.z;
+}
+
+function field(label, value, onInput, type = 'number') {
+  const id = 'f' + Math.random().toString(36).slice(2);
+  setTimeout(() => {
+    const el = document.getElementById(id);
+    if (el) el.oninput = () => { onInput(type === 'number' ? +el.value : el.value); draw(); rebuildList(); };
+  });
+  return `<label><span>${label}</span><input id="${id}" type="${type}" value="${value}"></label>`;
+}
+
+
+function labelFields(obj, type, i) {
+  const off = obj.labelOffset || [0, 0];
+  return field('Nume dus la X', off[0], v => { obj.labelOffset = [v, (obj.labelOffset||[0,0])[1]]; }) +
+         field('Nume dus la Y', off[1], v => { obj.labelOffset = [(obj.labelOffset||[0,0])[0], v]; }) +
+         `<div class="row"><button id="lblEdit" data-t="${type}" data-i="${i}">Rescrie numele</button>` +
+         `<button id="lblReset">Nume la loc</button></div>` +
+         `<div class="sub">Sau, pe hart\u0103: dublu-clic pe nume \u00eel rescrie, trasul \u00eel mut\u0103. Punctul galben e locul exact unde \u00eel a\u0219az\u0103 jocul.</div>`;
+}
+function wireLabelFields(obj) {
+  setTimeout(() => {
+    const reset = $('lblReset');
+    if (reset) reset.onclick = () => { pushUndo(); delete obj.labelOffset; showProps(); draw(); };
+    const edit = $('lblEdit');
+    if (edit) edit.onclick = () => startRename(edit.dataset.t, +edit.dataset.i);
+  });
+}
+
+function showProps() {
+  const box = $('props');
+  if (!sel) { box.innerHTML = '<div class="sub">Nimic selectat. Clic pe un obiect din hartă sau din listă.</div>'; return; }
+
+  if (sel.type === 'building') {
+    const b = L.buildings[sel.i];
+    const p = b.parts[sel.j ?? 0];
+    box.innerHTML =
+      field('Nume', b.label, v => b.label = v, 'text') +
+      `<label><span>Tip</span><select id="bk">${['dorm','canteen','office']
+        .map(k => `<option ${b.kind===k?'selected':''}>${k}</option>`).join('')}</select></label>` +
+      (b.parts.length > 1
+        ? `<div class="row" style="margin:8px 0 2px"><button id="wPrev">\u25c0</button>` +
+          `<button disabled style="flex:2">aripa ${(sel.j??0)+1} din ${b.parts.length}</button>` +
+          `<button id="wNext">\u25b6</button></div>`
+        : `<div class="sub">O singur\u0103 arip\u0103</div>`) +
+      field('X', p.x, v => p.x = v) + field('Y', p.y, v => p.y = v) +
+      field('Lățime', p.width, v => p.width = v) + field('Înălțime', p.height, v => p.height = v) +
+      `<div class="row"><button id="addWing">+ aripă</button><button id="dupWing">dublează</button>` +
+      `${b.parts.length>1?'<button class="danger" id="delWing">− aripă</button>':''}</div>` +
+      field('Rotație bloc (°)', b.rotation || 0, v => b.rotation = v) +
+      `<div class="row"><button id="rotL">−5°</button><button id="rot0">0°</button><button id="rotR">+5°</button></div>` +
+      `<div class="sub">Tot blocul, în jurul centrului lui — bila <b style="color:#9fb4d8">albastră</b> de deasupra.</div>` +
+      field(`Rotație aripa ${(sel.j??0)+1} (°)`, p.rotation || 0, v => p.rotation = v) +
+      `<div class="row"><button id="prL">−5°</button><button id="pr0">0°</button><button id="prR">+5°</button></div>` +
+      `<div class="sub">Doar aripa asta, în jurul centrului ei — bila <b style="color:#6ee7a8">verde</b> din stânga ei. Așa faci forma de „V întors”.</div>` +
+      labelFields(b, 'building', sel.i) +
+      `<div class="sub">Trage o aripă = muți doar aripa. Pătratul din centru (sau <kbd>Ctrl</kbd>+trage) = tot blocul. Aripile n-au nevoie să se atingă.</div>`;
+    setTimeout(() => {
+      $('bk').onchange = () => { b.kind = $('bk').value; draw(); rebuildList(); };
+      if ($('wPrev')) {
+        const pick = step => () => {
+          sel.j = (sel.j ?? 0) + step;
+          sel.j = (sel.j + b.parts.length) % b.parts.length;
+          showProps(); rebuildList(); draw();
+        };
+        $('wPrev').onclick = pick(-1); $('wNext').onclick = pick(1);
+      }
+      // A new wing lands south of the block with a gap, not on top of what is
+      // already there - you can always drag it back against the others.
+      $('addWing').onclick = () => {
+        pushUndo();
+        const k = boxOf(b);
+        b.parts.push({ x: Math.round(k.x), y: Math.round(k.y + k.height + 60), width: 300, height: 140 });
+        sel.j = b.parts.length - 1;
+        showProps(); rebuildList(); draw();
+      };
+      $('dupWing').onclick = () => {
+        pushUndo();
+        b.parts.push({ ...p, x: p.x + 60, y: p.y + p.height + 60 });
+        sel.j = b.parts.length - 1;
+        showProps(); rebuildList(); draw();
+      };
+      const turn = delta => () => {
+        pushUndo();
+        b.rotation = delta === null ? 0 : (b.rotation || 0) + delta;
+        showProps(); draw();
+      };
+      $('rot0').onclick = turn(null); $('rotL').onclick = turn(-5); $('rotR').onclick = turn(5);
+      const turnWing = delta => () => {
+        pushUndo();
+        p.rotation = delta === null ? 0 : (p.rotation || 0) + delta;
+        showProps(); draw();
+      };
+      $('pr0').onclick = turnWing(null); $('prL').onclick = turnWing(-5); $('prR').onclick = turnWing(5);
+      const lr = $('lblReset');
+      if (lr) lr.onclick = () => { pushUndo(); delete b.labelOffset; showProps(); draw(); };
+      const le = $('lblEdit');
+      if (le) le.onclick = () => startRename('building', sel.i);
+      if ($('delWing')) $('delWing').onclick = () => {
+        pushUndo(); b.parts.splice(sel.j??0,1);
+        sel.j = Math.min(sel.j ?? 0, b.parts.length-1);
+        showProps(); rebuildList(); draw();
+      };
+    });
+  }
+  else if (sel.type === 'zone') {
+    const z = L.zones[sel.i], b = z.bounds;
+    box.innerHTML =
+      field('Nume', z.label, v => z.label = v, 'text') +
+      `<label><span>Tip</span><select id="zk">${['pitch','calisthenics','cinema','parking']
+        .map(k => `<option ${z.kind===k?'selected':''}>${k}</option>`).join('')}</select></label>` +
+      field('X', b.x, v => b.x = v) + field('Y', b.y, v => b.y = v) +
+      field('Lățime', b.width, v => b.width = v) + field('Înălțime', b.height, v => b.height = v) +
+      labelFields(z, 'zone', sel.i);
+    wireLabelFields(z);
+    setTimeout(() => { $('zk').onchange = () => { z.kind = $('zk').value; draw(); rebuildList(); }; });
+  }
+  else if (sel.type === 'stand') {
+    const s = L.stands[sel.i];
+    box.innerHTML =
+      `<div class="sub">id: <code>${s.id}</code> — nu-l schimba, e cheia din trivia.ts</div>` +
+      field('Nume', s.label, v => s.label = v, 'text') +
+      field('X', s.x, v => s.x = v) + field('Y', s.y, v => s.y = v) +
+      field('Culoare', s.color, v => s.color = v) +
+      `<div class="row"><button id="lblEdit" data-t="stand" data-i="${sel.i}">Rescrie numele</button></div>` +
+      `<div class="sub">Numele e pictat pe pancarda standului, deci se rescrie dar nu se mută.</div>`;
+    setTimeout(() => {
+      const e = $('lblEdit');
+      if (e) e.onclick = () => startRename('stand', sel.i);
+    });
+  }
+  else if (sel.type === 'road') {
+    const r = L.roads[sel.i];
+    box.innerHTML =
+      field('id', r.id, v => r.id = v, 'text') +
+      field('Lățime', r.width, v => r.width = v) +
+      `<label><span>Suprafață</span><select id="rs">${['paved','asphalt']
+        .map(k => `<option ${r.surface===k?'selected':''}>${k}</option>`).join('')}</select></label>` +
+      `<div class="sub">${r.points.length} vârfuri. Dublu-clic pe drum = vârf nou, clic-dreapta pe vârf = șterge.</div>` +
+      `<div class="row"><button class="danger" id="delRoad">Șterge drumul</button></div>`;
+    setTimeout(() => {
+      $('rs').onchange = () => { r.surface = $('rs').value; draw(); rebuildList(); };
+      $('delRoad').onclick = () => { pushUndo(); L.roads.splice(sel.i,1); sel=null; showProps(); rebuildList(); draw(); };
+    });
+  }
+  else if (sel.type === 'gate') {
+    const g = L.gates[sel.i];
+    box.innerHTML =
+      field('Nume', g.label, v => g.label = v, 'text') +
+      field('X', g.x, v => g.x = v) + field('Y', g.y, v => g.y = v) +
+      field('Deschidere', g.opening, v => g.opening = v) +
+      field('Rotație', g.rotation, v => g.rotation = v) +
+      field('Text pe firmă', g.sign === undefined ? 'UTCN · OBSERVATOR' : g.sign,
+            v => g.sign = v, 'text') +
+      `<label><span>Principală</span><input type="checkbox" id="gm" ${g.main?'checked':''}></label>` +
+      labelFields(g, 'gate', sel.i) +
+      `<div class="sub">Stă în gard, sau în deschizătura dintre două garduri.</div>`;
+    wireLabelFields(g);
+    setTimeout(() => { $('gm').onchange = () => { g.main = $('gm').checked; draw(); rebuildList(); }; });
+  }
+  else if (sel.type === 'fence') {
+    const f = L.fence[sel.i];
+    box.innerHTML =
+      field('Nume', f.label, v => f.label = v, 'text') +
+      field('id', f.id, v => f.id = v, 'text') +
+      `<label><span>Închis</span><input type="checkbox" id="fc" ${f.closed?'checked':''}></label>` +
+      `<div class="sub">${f.points.length} vârfuri. Un gard <b>deschis</b> are două capete (bulinele portocalii) — acolo rămâne trecere. Unul <b>închis</b> împrejmuiește, iar copacii nu mai ies în afara lui.</div>` +
+      `<div class="sub">Dublu-clic pe gard = vârf nou, clic-dreapta pe vârf = șterge.</div>` +
+      `<div class="row"><button class="danger" id="delFence">Șterge gardul</button></div>`;
+    setTimeout(() => {
+      $('fc').onchange = () => { pushUndo(); f.closed = $('fc').checked; draw(); rebuildList(); };
+      $('delFence').onclick = () => {
+        pushUndo(); L.fence.splice(sel.i,1); sel=null; showProps(); rebuildList(); draw();
+      };
+    });
+  }
+  else box.innerHTML = '<div class="sub">—</div>';
+}
+
+// ---------------------------------------------------------------------------
+// Controls
+// ---------------------------------------------------------------------------
+function loadBg(src) {
+  if (!src) { bg.img = null; draw(); return; }
+  const img = new Image();
+  img.onload = () => { bg.img = img; draw(); };
+  img.src = src;
+}
+$('bgPick').onchange = () => loadBg($('bgPick').value);
+$('bgAlpha').oninput = () => { bg.alpha = +$('bgAlpha').value/100; draw(); };
+$('bgX').oninput = () => { bg.x = +$('bgX').value; draw(); };
+$('bgY').oninput = () => { bg.y = +$('bgY').value; draw(); };
+$('bgScale').oninput = () => { bg.scale = +$('bgScale').value; draw(); };
+$('bgBehind').onclick = () => { bg.behind = !bg.behind; draw(); };
+$('bgFit').onclick = () => {
+  if (!bg.img) return;
+  bg.scale = L.world.width / bg.img.width;
+  bg.x = 0; bg.y = (L.world.height - bg.img.height*bg.scale)/2;
+  $('bgScale').value = bg.scale.toFixed(3);
+  $('bgX').value = Math.round(bg.x); $('bgY').value = Math.round(bg.y);
+  draw();
+};
+$('wW').oninput = () => { L.world.width = +$('wW').value; draw(); };
+$('wH').oninput = () => { L.world.height = +$('wH').value; draw(); };
+for (const id of ['lFence','lRoads','lBuildings','lZones','lStands','lGates','lForests'])
+  $(id).onchange = draw;
+$('newRoad').onclick = startRoad;
+$('newFence').onclick = startFence;
+$('newForest').onclick = startForest;
+$('drawDone').onclick = finishLine;
+$('drawCancel').onclick = cancelLine;
+$('drawUndo').onclick = () => {
+  if (!drawing || !drawing.target.points.length) return;
+  drawing.target.points.pop();
+  refreshDrawbar(); rebuildList(); draw();
+};
+$('save').onclick = save;
+$('reload').onclick = load;
+
+// ---------------------------------------------------------------------------
+load().then(() => { resize(); fitView(); draw(); loadBg($('bgPick').value); });
+</script>
+</body>
+</html>

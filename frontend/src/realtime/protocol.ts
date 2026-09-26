@@ -1,7 +1,17 @@
-export const INPUT_KEYS = ['left', 'right', 'jump', 'action'] as const
+export const INPUT_KEYS = ['up', 'down', 'left', 'right', 'action'] as const
 
 export type InputKey = (typeof INPUT_KEYS)[number]
 export type ClientRole = 'game' | 'controller'
+
+export const STATUS_CODES = [
+  'connected',
+  'controller_connected',
+  'controller_disconnected',
+  'game_connected',
+  'game_disconnected',
+] as const
+
+export type StatusCode = (typeof STATUS_CODES)[number]
 
 export type InputMessage = {
   type: 'input'
@@ -15,7 +25,12 @@ export type InputResetMessage = {
 
 export type StatusMessage = {
   type: 'status'
-  status: string
+  status: StatusCode
+}
+
+export type SessionMessage = {
+  type: 'session'
+  session: string
 }
 
 export type ErrorMessage = {
@@ -28,15 +43,17 @@ export type ServerMessage =
   | InputMessage
   | InputResetMessage
   | StatusMessage
+  | SessionMessage
   | ErrorMessage
 
 export type InputState = Record<InputKey, boolean>
 
 export function createEmptyInputState(): InputState {
   return {
+    up: false,
+    down: false,
     left: false,
     right: false,
-    jump: false,
     action: false,
   }
 }
@@ -63,8 +80,10 @@ export function parseServerMessage(rawMessage: string): ServerMessage | null {
     case 'input_reset':
       return { type: 'input_reset' }
     case 'status':
-      return typeof value.status === 'string'
-        ? { type: 'status', status: value.status }
+      return isStatusCode(value.status) ? { type: 'status', status: value.status } : null
+    case 'session':
+      return typeof value.session === 'string' && value.session.length > 0
+        ? { type: 'session', session: value.session }
         : null
     case 'error':
       return typeof value.code === 'string' && typeof value.message === 'string'
@@ -81,4 +100,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isInputKey(value: unknown): value is InputKey {
   return typeof value === 'string' && INPUT_KEYS.includes(value as InputKey)
+}
+
+function isStatusCode(value: unknown): value is StatusCode {
+  return typeof value === 'string' && STATUS_CODES.includes(value as StatusCode)
 }

@@ -1,15 +1,21 @@
-import { useRef, useState, type PointerEvent } from 'react'
+import { useRef, useState, type PointerEvent, type ReactNode } from 'react'
 import type { InputKey } from '../../realtime/protocol'
 
 type ControllerButtonProps = {
   inputKey: InputKey
   label: string
+  glyph: ReactNode
+  variant: 'direction' | 'action'
+  disabled?: boolean
   onInputChange: (key: InputKey, pressed: boolean) => void
 }
 
 export function ControllerButton({
   inputKey,
   label,
+  glyph,
+  variant,
+  disabled = false,
   onInputChange,
 }: ControllerButtonProps) {
   const pressedRef = useRef(false)
@@ -17,14 +23,19 @@ export function ControllerButton({
 
   function press(event: PointerEvent<HTMLButtonElement>) {
     event.preventDefault()
-    if (pressedRef.current) {
+    if (pressedRef.current || disabled) {
       return
     }
 
+    // Keeps the release firing even if the thumb slides off the button.
     event.currentTarget.setPointerCapture(event.pointerId)
     pressedRef.current = true
     setPressed(true)
     onInputChange(inputKey, true)
+
+    if ('vibrate' in navigator) {
+      navigator.vibrate(12)
+    }
   }
 
   function release() {
@@ -39,15 +50,27 @@ export function ControllerButton({
 
   return (
     <button
-      className={`controller-button${pressed ? ' controller-button--pressed' : ''}`}
+      className={[
+        'pad-button',
+        `pad-button--${variant}`,
+        `pad-button--${inputKey}`,
+        pressed ? 'pad-button--pressed' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       type="button"
+      disabled={disabled}
+      aria-label={label}
       onPointerDown={press}
       onPointerUp={release}
       onPointerCancel={release}
       onLostPointerCapture={release}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {label}
+      <span className="pad-button__glyph" aria-hidden="true">
+        {glyph}
+      </span>
+      <span className="pad-button__label">{label}</span>
     </button>
   )
 }
