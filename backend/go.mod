@@ -1,4 +1,4 @@
-module zut-web-game/backend
+module pisica-din-campus/backend
 
 go 1.23.0
 

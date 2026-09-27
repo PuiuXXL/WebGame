@@ -1,5 +1,5 @@
 {
-  "name": "frontend",
+  "name": "pisica-din-campus",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -7,11 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
+    "preview": "vite preview",
+    "map": "node scripts/render-map.ts",
+    "map:check": "node scripts/check-map.ts",
+    "map:edit": "node scripts/map-editor/server.ts",
     "test:input": "node --experimental-strip-types tests/GameInput.test.mjs",
-    "preview": "vite preview"
+    "test": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {
-    "phaser": "^4.2.1",
+    "phaser": "^3.87.0",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

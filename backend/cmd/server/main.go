@@ -12,7 +12,7 @@ import (
 	"syscall"
 	"time"
 
-	"zut-web-game/backend/internal/realtime"
+	"pisica-din-campus/backend/internal/realtime"
 )
 
 func main() {

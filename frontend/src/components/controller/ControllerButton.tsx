@@ -1,30 +1,44 @@
-import { useRef, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, type PointerEvent, type ReactNode } from 'react'
 import type { InputKey } from '../../realtime/protocol'
 
 type ControllerButtonProps = {
   inputKey: InputKey
   label: string
+  glyph: ReactNode
+  variant: 'direction' | 'action'
+  pressed: boolean
+  disabled?: boolean
   onInputChange: (key: InputKey, pressed: boolean) => void
 }
 
 export function ControllerButton({
   inputKey,
   label,
+  glyph,
+  variant,
+  pressed,
+  disabled = false,
   onInputChange,
 }: ControllerButtonProps) {
   const pressedRef = useRef(false)
-  const [pressed, setPressed] = useState(false)
+  useEffect(() => {
+    pressedRef.current = pressed
+  }, [pressed])
 
   function press(event: PointerEvent<HTMLButtonElement>) {
     event.preventDefault()
-    if (pressedRef.current) {
+    if (pressedRef.current || disabled) {
       return
     }
 
+    // Keeps the release firing even if the thumb slides off the button.
     event.currentTarget.setPointerCapture(event.pointerId)
     pressedRef.current = true
-    setPressed(true)
     onInputChange(inputKey, true)
+
+    if ('vibrate' in navigator) {
+      navigator.vibrate(12)
+    }
   }
 
   function release() {
@@ -33,15 +47,22 @@ export function ControllerButton({
     }
 
     pressedRef.current = false
-    setPressed(false)
     onInputChange(inputKey, false)
   }
 
   return (
     <button
-      className={`controller-button controller-button--${inputKey}${pressed ? ' controller-button--pressed' : ''}`}
+      className={[
+        'pad-button',
+        `pad-button--${variant}`,
+        `pad-button--${inputKey}`,
+        pressed ? 'pad-button--pressed' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       type="button"
-      aria-label={inputKey.toUpperCase()}
+      disabled={disabled}
+      aria-label={label}
       onPointerDown={press}
       onPointerUp={release}
       onPointerCancel={release}
@@ -49,7 +70,10 @@ export function ControllerButton({
       onDragStart={(event) => event.preventDefault()}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {label}
+      <span className="pad-button__glyph" aria-hidden="true">
+        {glyph}
+      </span>
+      <span className="pad-button__label">{label}</span>
     </button>
   )
 }

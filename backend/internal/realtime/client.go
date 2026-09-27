@@ -39,6 +39,21 @@ func (client *client) enqueue(message Message) bool {
 	}
 }
 
+// enqueueCritical delivers a message that must not be dropped, such as input_reset.
+// A client whose queue stays full for the whole write timeout cannot be kept in sync,
+// so it is torn down instead of being left holding stale keys.
+func (client *client) enqueueCritical(message Message) {
+	timer := time.NewTimer(writeTimeout)
+	defer timer.Stop()
+
+	select {
+	case <-client.done:
+	case client.send <- message:
+	case <-timer.C:
+		client.closeNow()
+	}
+}
+
 func (client *client) writeLoop(ctx context.Context) {
 	for {
 		select {

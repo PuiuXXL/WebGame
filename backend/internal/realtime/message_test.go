@@ -33,7 +33,11 @@ func TestValidateInput(t *testing.T) {
 	}{
 		{name: "up", message: Message{Type: MessageTypeInput, Key: InputKeyUp, Pressed: &pressed}},
 		{name: "down", message: Message{Type: MessageTypeInput, Key: InputKeyDown, Pressed: &pressed}},
-		{name: "old jump key", message: Message{Type: MessageTypeInput, Key: "jump", Pressed: &pressed}, wantErr: true},
+		{name: "left", message: Message{Type: MessageTypeInput, Key: InputKeyLeft, Pressed: &pressed}},
+		{name: "right", message: Message{Type: MessageTypeInput, Key: InputKeyRight, Pressed: &pressed}},
+		{name: "action", message: Message{Type: MessageTypeInput, Key: InputKeyAction, Pressed: &pressed}},
+		{name: "retired key", message: Message{Type: MessageTypeInput, Key: "jump", Pressed: &pressed}, wantErr: true},
+		{name: "unknown key", message: Message{Type: MessageTypeInput, Key: "crouch", Pressed: &pressed}, wantErr: true},
 		{name: "missing pressed", message: Message{Type: MessageTypeInput, Key: InputKeyLeft}, wantErr: true},
 		{name: "wrong type", message: Message{Type: MessageTypeStatus, Key: InputKeyLeft, Pressed: &pressed}, wantErr: true},
 	}

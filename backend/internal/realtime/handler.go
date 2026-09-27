@@ -14,6 +14,8 @@ import (
 const (
 	joinTimeout     = 10 * time.Second
 	maxMessageBytes = 4 * 1024
+	pingInterval    = 15 * time.Second
+	pongTimeout     = 10 * time.Second
 )
 
 type Handler struct {
@@ -48,10 +50,30 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 		return
 	}
 
+	// A joining game screen always gets a fresh pairing code, which also kicks any
+	// controller still paired with the previous one. A controller must present the
+	// code currently printed in the QR.
+	var sessionToken string
+	if joinMessage.Role == RoleGame {
+		sessionToken, err = handler.hub.resumeOrRotateSession(joinMessage.Session)
+		if err != nil {
+			_ = connection.Close(websocket.StatusInternalError, "could not create a pairing code")
+			return
+		}
+	} else if err := handler.hub.authorizeController(joinMessage.Session); err != nil {
+		_ = connection.Close(websocket.StatusPolicyViolation, err.Error())
+		return
+	}
+
 	connectionContext, cancelConnection := context.WithCancel(context.Background())
 	connectedClient := newClient(joinMessage.Role, connection)
 	go connectedClient.writeLoop(connectionContext)
+	go keepAlive(connectionContext, connection, connectedClient)
 	handler.hub.register(connectedClient)
+
+	if sessionToken != "" {
+		connectedClient.enqueue(sessionMessage(sessionToken))
+	}
 
 	defer func() {
 		handler.hub.unregister(connectedClient)
@@ -71,8 +93,8 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 			return
 		}
 
-		if connectedClient.role != RoleController {
-			connectedClient.enqueue(errorMessage("role_not_allowed", errors.New("only the controller can send commands")))
+		if connectedClient.role == RoleGame {
+			handler.handleGameMessage(connectedClient, message)
 			continue
 		}
 
@@ -97,6 +119,45 @@ func (handler *Handler) ServeHTTP(response http.ResponseWriter, request *http.Re
 
 		if err := handler.hub.forwardInput(connectedClient, forwarded); err != nil {
 			connectedClient.enqueue(errorMessage("input_not_forwarded", err))
+		}
+	}
+}
+
+func (handler *Handler) handleGameMessage(gameClient *client, message Message) {
+	if message.Type != MessageTypeNewSession {
+		gameClient.enqueue(errorMessage("role_not_allowed", errors.New("only the controller can send input")))
+		return
+	}
+
+	token, err := handler.hub.rotateSession()
+	if err != nil {
+		gameClient.enqueue(errorMessage("session_rotation_failed", err))
+		return
+	}
+	gameClient.enqueue(sessionMessage(token))
+}
+
+// keepAlive detects peers that vanished without closing the socket - a phone that
+// locked, lost Wi-Fi or ran out of battery. Without it those connections keep
+// holding the controller slot forever.
+func keepAlive(ctx context.Context, connection *websocket.Conn, connectedClient *client) {
+	ticker := time.NewTicker(pingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-connectedClient.done:
+			return
+		case <-ticker.C:
+			pingContext, cancel := context.WithTimeout(ctx, pongTimeout)
+			err := connection.Ping(pingContext)
+			cancel()
+			if err != nil {
+				connectedClient.closeNow()
+				return
+			}
 		}
 	}
 }

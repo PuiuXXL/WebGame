@@ -12,15 +12,26 @@ const (
 	MessageTypeInputReset MessageType = "input_reset"
 	MessageTypeStatus     MessageType = "status"
 	MessageTypeError      MessageType = "error"
+	MessageTypeSession    MessageType = "session"
+	MessageTypeNewSession MessageType = "new_session"
 
 	RoleGame       Role = "game"
 	RoleController Role = "controller"
 
-	InputKeyLeft   InputKey = "left"
-	InputKeyRight  InputKey = "right"
 	InputKeyUp     InputKey = "up"
 	InputKeyDown   InputKey = "down"
+	InputKeyLeft   InputKey = "left"
+	InputKeyRight  InputKey = "right"
 	InputKeyAction InputKey = "action"
+)
+
+// Status values are a closed set so both ends can switch on them exhaustively.
+const (
+	StatusConnected              = "connected"
+	StatusControllerConnected    = "controller_connected"
+	StatusControllerDisconnected = "controller_disconnected"
+	StatusGameConnected          = "game_connected"
+	StatusGameDisconnected       = "game_disconnected"
 )
 
 type Message struct {
@@ -31,6 +42,7 @@ type Message struct {
 	Status  string      `json:"status,omitempty"`
 	Code    string      `json:"code,omitempty"`
 	Message string      `json:"message,omitempty"`
+	Session string      `json:"session,omitempty"`
 }
 
 func (message Message) ValidateJoin() error {
@@ -65,7 +77,7 @@ func (message Message) ValidateInputReset() error {
 	if message.Type != MessageTypeInputReset {
 		return fmt.Errorf("message type must be %q", MessageTypeInputReset)
 	}
-	if message.Key != "" || message.Pressed != nil || message.Role != "" || message.Status != "" || message.Code != "" || message.Message != "" {
+	if message.Key != "" || message.Pressed != nil || message.Role != "" || message.Status != "" || message.Code != "" || message.Message != "" || message.Session != "" {
 		return fmt.Errorf("input_reset must not contain other fields")
 	}
 	return nil
@@ -73,7 +85,7 @@ func (message Message) ValidateInputReset() error {
 
 func isValidInputKey(key InputKey) bool {
 	switch key {
-	case InputKeyLeft, InputKeyRight, InputKeyUp, InputKeyDown, InputKeyAction:
+	case InputKeyUp, InputKeyDown, InputKeyLeft, InputKeyRight, InputKeyAction:
 		return true
 	default:
 		return false
@@ -82,6 +94,10 @@ func isValidInputKey(key InputKey) bool {
 
 func statusMessage(status string) Message {
 	return Message{Type: MessageTypeStatus, Status: status}
+}
+
+func sessionMessage(token string) Message {
+	return Message{Type: MessageTypeSession, Session: token}
 }
 
 func errorMessage(code string, err error) Message {

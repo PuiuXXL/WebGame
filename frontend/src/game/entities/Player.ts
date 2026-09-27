@@ -8,7 +8,10 @@ export class Player {
   private readonly sprite: Phaser.Physics.Arcade.Sprite
   private currentDirection: Direction | null = null
 
-  constructor(scene: Phaser.Scene, x: number, y: number) {
+  private readonly sizeScale: number
+
+  constructor(scene: Phaser.Scene, x: number, y: number, sizeScale = 1) {
+    this.sizeScale = sizeScale
     this.sprite = scene.physics.add.sprite(x, y, 'cat-idle', 'idle-frame')
     this.setIdleAppearance()
     this.sprite.setCollideWorldBounds(true)
@@ -18,7 +21,7 @@ export class Player {
     return this.sprite
   }
 
-  update(input: GameInput) {
+  update(input: GameInput, speed = MOVE_SPEED) {
     const horizontal = Number(input.isPressed('right')) - Number(input.isPressed('left'))
     const vertical = Number(input.isPressed('down')) - Number(input.isPressed('up'))
     const length = Math.hypot(horizontal, vertical)
@@ -35,8 +38,8 @@ export class Player {
     }
 
     this.sprite.setVelocity(
-      (horizontal / length) * MOVE_SPEED,
-      (vertical / length) * MOVE_SPEED,
+      (horizontal / length) * speed,
+      (vertical / length) * speed,
     )
 
     const direction: Direction = horizontal < 0 ? 'left'
@@ -48,17 +51,17 @@ export class Player {
       this.currentDirection = direction
       this.sprite.play(`cat-walk-${direction}`)
       if (direction === 'left' || direction === 'right') {
-        this.sprite.setScale(0.5)
+        this.sprite.setScale(0.5 * this.sizeScale)
         this.sprite.body?.setSize(100, 60).setOffset(61, 260)
       } else {
-        this.sprite.setScale(0.36)
+        this.sprite.setScale(0.36 * this.sizeScale)
         this.sprite.body?.setSize(139, 83).setOffset(42, 285)
       }
     }
   }
 
   private setIdleAppearance() {
-    this.sprite.setScale(0.36)
+    this.sprite.setScale(0.36 * this.sizeScale)
     this.sprite.body?.setSize(139, 83).setOffset(90, 270)
   }
 }
