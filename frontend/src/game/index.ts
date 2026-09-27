@@ -28,10 +28,12 @@ export type GameHandle = {
   bridge: GameBridge
   /** Re-measures the parent, needed after the host element was hidden. */
   refresh: () => void
+  setActive: (active: boolean) => void
   destroy: () => void
 }
 
 export function createGame(parent: HTMLElement): GameHandle {
+  let active = true
   const bridge = new GameBridge()
   const state = new GameState(STANDS.map((stand) => stand.id))
 
@@ -63,14 +65,14 @@ export function createGame(parent: HTMLElement): GameHandle {
 
   function handleKeyDown(event: KeyboardEvent) {
     const key = KEYBOARD_MAP[event.code]
-    if (!key) return
+    if (!key || !active) return
     event.preventDefault()
     bridge.setKey(key, true)
   }
 
   function handleKeyUp(event: KeyboardEvent) {
     const key = KEYBOARD_MAP[event.code]
-    if (!key) return
+    if (!key || !active) return
     event.preventDefault()
     bridge.setKey(key, false)
   }
@@ -91,6 +93,12 @@ export function createGame(parent: HTMLElement): GameHandle {
 
   return {
     bridge,
+    setActive: (next) => {
+      active = next
+      bridge.releaseAll()
+      if (next) game.resume()
+      else game.pause()
+    },
     refresh: () => {
       // refresh() uses cached parent dimensions; measure after unhiding first.
       game.scale.getParentBounds()

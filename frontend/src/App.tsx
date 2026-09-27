@@ -7,8 +7,7 @@ function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/game" replace />} />
-      <Route path="/game" element={<GamePage />} />
-      <Route path="/game/*" element={<Navigate to="/game" replace />} />
+      <Route path="/game/*" element={<GamePage />} />
       <Route path="/controller" element={<ControllerPage />} />
       <Route path="*" element={<Navigate to="/game" replace />} />
     </Routes>

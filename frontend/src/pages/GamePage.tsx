@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { GameStartPage } from './GameStartPage'
 import { ControllerQrCode } from '../components/ControllerQrCode'
 import { getControllerUrl, isLoopbackOrigin } from '../config/urls'
@@ -32,7 +33,16 @@ const EMPTY_STATUS: GameStatus = {
 }
 
 export function GamePage() {
-  const [phase, setPhase] = useState<Phase>('lobby')
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const phase: Phase = pathname === '/game/start' ? 'start'
+    : pathname === '/game/play' ? 'playing' : 'lobby'
+  const phaseRef = useRef(phase)
+  useEffect(() => { phaseRef.current = phase }, [phase])
+  const setPhase = useCallback((next: Phase) => {
+    phaseRef.current = next
+    navigate(next === 'lobby' ? '/game' : next === 'start' ? '/game/start' : '/game/play', { replace: true })
+  }, [navigate])
   // Mirrors bridge.speedScale purely so the slider and its readout render; the
   // game loop reads the bridge, never this.
   const [speedScale, setSpeedScale] = useState(loadSpeedScale)
@@ -48,10 +58,11 @@ export function GamePage() {
   const handleServerMessage = useCallback((message: ServerMessage) => {
     switch (message.type) {
       case 'input':
-        if (message.key === 'action' && message.pressed) {
-          setPhase((current) => current === 'start' ? 'playing' : current)
+        if (phaseRef.current === 'start' && message.key === 'action' && message.pressed) {
+          setPhase('playing')
+        } else if (phaseRef.current === 'playing') {
+          gameRef.current?.bridge.setKey(message.key, message.pressed)
         }
-        gameRef.current?.bridge.setKey(message.key, message.pressed)
         break
       case 'input_reset':
         gameRef.current?.bridge.releaseAll()
@@ -62,7 +73,7 @@ export function GamePage() {
       case 'status':
         if (message.status === 'controller_connected') {
           setControllerConnected(true)
-          setPhase((current) => current === 'lobby' ? (gameRef.current ? 'playing' : 'start') : current)
+          if (phaseRef.current === 'lobby') setPhase('start')
         }
         if (message.status === 'controller_disconnected') {
           setControllerConnected(false)
@@ -73,7 +84,7 @@ export function GamePage() {
         setServerError(message.message)
         break
     }
-  }, [])
+  }, [setPhase])
 
   const { status, protocolError, requestNewSession } = useRealtimeClient(
     'game',
@@ -86,7 +97,8 @@ export function GamePage() {
    * simply hidden instead - and picked up again exactly where it was left.
    */
   useEffect(() => {
-    if (phase !== 'playing') {
+    if (phase !== 'playing' || (!controllerConnected && !gameStarted)) {
+      gameRef.current?.setActive(false)
       return
     }
 
@@ -96,8 +108,9 @@ export function GamePage() {
     }
 
     // The host was display:none while in the lobby, so its measured size was zero.
+    gameRef.current?.setActive(true)
     gameRef.current?.refresh()
-  }, [phase])
+  }, [phase, controllerConnected, gameStarted])
 
   useEffect(() => {
     return () => {
@@ -120,7 +133,7 @@ export function GamePage() {
     setControllerConnected(false)
     gameRef.current?.bridge.releaseAll()
     setPhase('lobby')
-  }, [requestNewSession])
+  }, [requestNewSession, setPhase])
 
   const handleReset = useCallback(() => {
     gameRef.current?.bridge.requestReset()
@@ -142,6 +155,14 @@ export function GamePage() {
       gameRef.current?.bridge.releaseAll()
     }
   }, [status])
+
+  // A refreshed/direct start or play URL has no paired controller yet.
+  useEffect(() => {
+    const knownPath = ['/game', '/game/', '/game/start', '/game/play'].includes(pathname)
+    if (!knownPath || (session && !controllerConnected && !gameStarted && phase !== 'lobby')) {
+      setPhase('lobby')
+    }
+  }, [pathname, session, controllerConnected, gameStarted, phase, setPhase])
 
   const playing = phase === 'playing'
 
@@ -251,9 +272,8 @@ export function GamePage() {
             </p>
             {isLoopbackOrigin() && (
               <p className="lobby__warning">
-                Pagina e deschisă pe <strong>localhost</strong>, deci telefonul nu va
-                putea deschide linkul din cod. Deschide jocul de pe adresa din rețea,
-                de exemplu http://192.168.1.134:5173/game
+                Adresa din codul QR indică <strong>localhost</strong>. Configurează
+                VITE_PUBLIC_APP_URL în .env cu adresa accesibilă telefonului.
               </p>
             )}
           </div>
