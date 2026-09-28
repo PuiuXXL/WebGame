@@ -14,7 +14,6 @@ import {
   SPAWN,
   STANDS,
   STAND_INTERACT_RADIUS,
-  TOTAL_MEDALS,
   TREES,
   WORLD_HEIGHT,
   WORLD_WIDTH,
@@ -642,19 +641,24 @@ export class WorldScene extends Phaser.Scene {
 
   private publishStatus() {
     const medals = this.state.medals
-    this.hudText.setText(`${medals} / ${TOTAL_MEDALS} medalii`)
+    this.hudText.setText(`${medals} / ${this.state.targetMedals} medalii`)
     this.bridge.publish({
       medals,
-      total: TOTAL_MEDALS,
+      total: this.state.targetMedals,
       screen: 'world',
       nearStand: this.nearest?.label ?? null,
-      completed: medals === TOTAL_MEDALS,
+      completed: this.state.completed,
     })
   }
 
   /** Called by the trivia scene when it closes. */
   onTriviaClosed(standId: StandId, solved: boolean) {
     this.refreshMarkers()
+    if (this.state.completed) {
+      this.bridge.releaseAll()
+      this.scene.start('gameover')
+      return
+    }
     this.publishStatus()
 
     if (!solved) {

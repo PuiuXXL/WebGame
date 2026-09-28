@@ -5,7 +5,7 @@ joacă de pe telefon. Telefonul devine controller scanând un cod QR; nu se
 instalează nimic.
 
 **Scopul jocului:** plimbi o pisică prin campusul Observator, te oprești la
-standurile OSUT, răspunzi corect la trivia și strângi toate cele 10 medalii.
+standurile OSUT, răspunzi corect la trivia și strângi toate cele 13 medalii.
 
 ---
 
@@ -26,20 +26,25 @@ go run ./cmd/server          # ascultă pe :8080
 ```powershell
 cd frontend
 npm install
-npm run dev -- --host        # --host este OBLIGATORIU ca telefonul să ajungă la Vite
+# Copiază .env.example în .env și setează VITE_PUBLIC_APP_URL cu adresa ta LAN.
+npm run dev                 # Vite ascultă și pe adresa LAN prin server.host
 ```
 
 **Pe laptop:** deschide `http://<IP-ul-tău-din-rețea>:5173/game`
 
-> ⚠️ **Nu deschide pe `localhost`.** Codul QR e generat din adresa paginii, deci
-> pe localhost ar trimite telefonul către el însuși. Îți afli IP-ul cu `ipconfig`.
-> Jocul îți spune pe ecran dacă ai greșit aici.
+`frontend/.env` controlează adresele:
 
-**Pe telefon:** aceeași rețea Wi-Fi, scanezi codul QR. Jocul pornește singur în
-momentul în care controllerul se conectează.
+- `VITE_PUBLIC_APP_URL`: originea publică accesibilă telefonului, cu protocol și port, fără `/game`. QR-ul folosește `/controller?s=<cod>`, iar WebSocket-ul derivă aceeași adresă cu `/ws` și protocolul `ws`/`wss`.
+- `BACKEND_URL`: adresa internă a serverului Go, folosită doar de proxy-ul Vite local. Exemplul implicit din `.env.example` este `http://127.0.0.1:8080`. Dacă schimbi `PORT` la backend, actualizează și această variabilă.
+- `VITE_REALTIME_URL`: opțional, doar când WebSocket-ul public este găzduit separat.
 
-Pe laptop poți juca și fără telefon, pentru testare: **săgeți / WASD** pentru
-mișcare, **Space / Enter** pentru acțiune.
+Deschide monitorul folosind aceeași adresă LAN din `VITE_PUBLIC_APP_URL`, urmată de `/game`; telefonul trebuie să poată accesa acea adresă. Dacă deschizi monitorul pe `localhost`, WebSocket-ul va folosi tot adresa publică din `.env`, deci configurează `ALLOWED_ORIGINS` în mediul procesului Go pentru a permite și originea monitorului (de exemplu `localhost:5173`). Serverul Go citește variabilele din mediul procesului; nu încarcă automat un fișier `.env`.
+
+**Flow:** monitorul deschide `/game` și afișează QR-ul → telefonul deschide `/controller?s=<cod>` → după asocierea WebSocket, monitorul navighează automat la `/game/start` → ACȚIUNE pe telefon deschide `/game/play`. Conexiunea și sesiunea rămân aceleași între cele trei rute.
+
+După pornire, săgețile/WASD și Space/Enter funcționează și pe monitor. În lobby și pe ecranul de start, harta este oprită și nu primește comenzi.
+
+**Hosting:** setează `VITE_PUBLIC_APP_URL=https://<domeniul-tău>` înainte de build sau las-o goală pentru a folosi domeniul paginii. Serverul de hosting trebuie să servească `index.html` pentru rutele aplicației și să trimită `/ws` către serverul Go, cu suport WebSocket. Proxy-ul din `vite.config.ts` este pentru dezvoltare, nu este inclus în fișierele statice din build. Repornește Vite după schimbarea `.env`; pentru producție refă buildul. Dacă WebSocket-ul are alt domeniu, configurează și `VITE_REALTIME_URL` și originile permise pe backend.
 
 ---
 

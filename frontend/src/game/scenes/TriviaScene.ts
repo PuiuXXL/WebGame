@@ -1,5 +1,5 @@
 import Phaser from 'phaser'
-import { STANDS, TOTAL_MEDALS, type StandId } from '../campus'
+import { STANDS, type StandId } from '../campus'
 import { STAND_COLORS, toNumber } from '../palette'
 import { COOLDOWN_MS, TRIVIA } from '../trivia'
 import type { GameBridge, GameState } from '../bridge'
@@ -84,7 +84,7 @@ export class TriviaScene extends Phaser.Scene {
       .setOrigin(0, 0.5)
 
     this.add
-      .text(CARD_X + CARD_WIDTH - 28, 78, `${this.state.medals} / ${TOTAL_MEDALS} medalii`, {
+      .text(CARD_X + CARD_WIDTH - 28, 78, `${this.state.medals} / ${this.state.targetMedals} medalii`, {
         fontFamily: FONT,
         fontSize: '20px',
         fontStyle: '700',

@@ -137,6 +137,7 @@ export type StandId =
   | 'tehnic'
   | 'tineret'
   | 'financiar'
+  | 'educational'
 
 export type Stand = {
   id: StandId

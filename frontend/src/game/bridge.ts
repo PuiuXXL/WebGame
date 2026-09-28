@@ -15,7 +15,7 @@ import type { StandId } from './campus'
 
 const EMPTY_EDGES: ReadonlySet<InputKey> = new Set()
 
-export type GameScreen = 'world' | 'trivia'
+export type GameScreen = 'world' | 'trivia' | 'gameover'
 
 /** How fast the cat walks, as a multiple of the base speed. */
 export const SPEED_SCALE_MIN = 0.4
@@ -170,7 +170,13 @@ export type StandProgress = {
 export class GameState {
   readonly progress = new Map<StandId, StandProgress>()
 
-  constructor(standIds: StandId[]) {
+  readonly targetMedals: number
+
+  constructor(standIds: StandId[], targetMedals = standIds.length) {
+    if (!Number.isInteger(targetMedals) || targetMedals < 1 || targetMedals > standIds.length) {
+      throw new RangeError('Ținta trebuie să fie un număr întreg între 1 și numărul de standuri.')
+    }
+    this.targetMedals = targetMedals
     this.reset(standIds)
   }
 
@@ -202,6 +208,10 @@ export class GameState {
       }
     }
     return count
+  }
+
+  get completed() {
+    return this.medals >= this.targetMedals
   }
 
   isCoolingDown(id: StandId, now: number) {

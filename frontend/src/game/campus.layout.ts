@@ -854,6 +854,13 @@ export const LAYOUT = {
   ],
   "stands": [
     {
+      "id": "educational",
+      "label": "Educațional",
+      "x": 4100,
+      "y": 2020,
+      "color": 6
+    },
+    {
       "id": "bal-bobocilor",
       "label": "Balul Bobocilor",
       "x": 2720,

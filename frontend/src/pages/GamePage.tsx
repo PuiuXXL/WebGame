@@ -12,6 +12,7 @@ import {
   SPEED_SCALE_MIN,
   loadSpeedScale,
 } from '../game/bridge'
+import { TOTAL_MEDALS } from '../game/campus'
 import type { GameStatus } from '../game/bridge'
 
 const statusLabels = {
@@ -46,6 +47,10 @@ export function GamePage() {
   // Mirrors bridge.speedScale purely so the slider and its readout render; the
   // game loop reads the bridge, never this.
   const [speedScale, setSpeedScale] = useState(loadSpeedScale)
+  const [targetInput, setTargetInput] = useState(String(TOTAL_MEDALS))
+  const targetMedals = Number(targetInput)
+  const validTarget = targetInput.trim() !== '' && Number.isInteger(targetMedals)
+    && targetMedals >= 1 && targetMedals <= TOTAL_MEDALS
   const [session, setSession] = useState<string | null>(null)
   const [controllerConnected, setControllerConnected] = useState(false)
   const [gameStarted, setGameStarted] = useState(false)
@@ -59,7 +64,7 @@ export function GamePage() {
     switch (message.type) {
       case 'input':
         if (phaseRef.current === 'start' && message.key === 'action' && message.pressed) {
-          setPhase('playing')
+          if (validTarget) setPhase('playing')
         } else if (phaseRef.current === 'playing') {
           gameRef.current?.bridge.setKey(message.key, message.pressed)
         }
@@ -84,7 +89,7 @@ export function GamePage() {
         setServerError(message.message)
         break
     }
-  }, [setPhase])
+  }, [setPhase, validTarget])
 
   const { status, protocolError, requestNewSession } = useRealtimeClient(
     'game',
@@ -102,15 +107,15 @@ export function GamePage() {
       return
     }
 
-    if (!gameRef.current && containerRef.current) {
-      gameRef.current = createGame(containerRef.current)
+    if (!gameRef.current && containerRef.current && validTarget) {
+      gameRef.current = createGame(containerRef.current, targetMedals)
       setGameStarted(true)
     }
 
     // The host was display:none while in the lobby, so its measured size was zero.
     gameRef.current?.setActive(true)
     gameRef.current?.refresh()
-  }, [phase, controllerConnected, gameStarted])
+  }, [phase, controllerConnected, gameStarted, targetMedals, validTarget])
 
   useEffect(() => {
     return () => {
@@ -136,8 +141,12 @@ export function GamePage() {
   }, [requestNewSession, setPhase])
 
   const handleReset = useCallback(() => {
-    gameRef.current?.bridge.requestReset()
-  }, [])
+    gameRef.current?.destroy()
+    gameRef.current = null
+    setGameStarted(false)
+    setGameStatus(EMPTY_STATUS)
+    setPhase(controllerConnected ? 'start' : 'lobby')
+  }, [controllerConnected, setPhase])
 
   const changeSpeed = useCallback((value: number) => {
     setSpeedScale(value)
@@ -165,6 +174,28 @@ export function GamePage() {
   }, [pathname, session, controllerConnected, gameStarted, phase, setPhase])
 
   const playing = phase === 'playing'
+  const medalControls = (
+    <fieldset className="medal-target" disabled={gameStarted}>
+      <legend>Medalii necesare pentru finalizare</legend>
+      <div className="medal-target__presets">
+        {[4, 8, 14].map((value) => (
+          <button key={value} type="button" className="ghost-button"
+            aria-pressed={targetMedals === value}
+            onClick={() => setTargetInput(String(value))}>
+            {value} medalii
+          </button>
+        ))}
+      </div>
+      <label>
+        Alege manual (1–{TOTAL_MEDALS})
+        <input type="number" min={1} max={TOTAL_MEDALS} step={1}
+          value={targetInput} aria-invalid={!validTarget}
+          onChange={(event) => setTargetInput(event.target.value)} />
+      </label>
+      {!validTarget && <p role="alert">Alege un număr întreg între 1 și {TOTAL_MEDALS}.</p>}
+      {gameStarted && <p>Ținta este fixată pentru runda în curs.</p>}
+    </fieldset>
+  )
 
   return (
     <main className={`page game-shell${playing ? ' game-shell--playing' : ''}`}>
@@ -231,9 +262,10 @@ export function GamePage() {
       <div className="game-canvas" ref={containerRef} hidden={!playing} />
 
       {playing && gameStatus.completed && (
-        <div className="game-complete">
-          <h2>Ai strâns toate medaliile!</h2>
-          <p>Apasă „Reset joc” pentru încă o tură.</p>
+        <div className="game-replay">
+          <button type="button" className="ghost-button" onClick={handleReset}>
+            Joacă din nou
+          </button>
         </div>
       )}
 
@@ -247,9 +279,13 @@ export function GamePage() {
         <>
           <GameStartPage />
           <div className="game-start-controls">
+            <p>Ținta rundei: {validTarget ? `${targetMedals} medalii` : 'necompletată'}</p>
             <p>{controllerConnected && status === 'connected'
-              ? 'Apasă ACȚIUNE pe telefon pentru a începe.'
+              ? validTarget ? 'Apasă ACȚIUNE pe telefon pentru a începe.' : 'Revino la configurare pentru a completa ținta.'
               : 'Controller deconectat. Reconectează telefonul sau generează un cod nou.'}</p>
+            <button type="button" className="ghost-button" onClick={() => setPhase('lobby')}>
+              Înapoi la configurare
+            </button>
             <button type="button" className="ghost-button" onClick={handleNewCode}>
               Cod nou (QR)
             </button>
@@ -265,7 +301,7 @@ export function GamePage() {
             <p className="lobby__lead">
               Scanează codul cu telefonul ca să primești controllerul. Plimbă pisica
               prin campus, oprește-te la standurile OSUT și răspunde corect ca să
-              strângi toate medaliile.
+              atingi numărul de medalii ales înainte de joc.
             </p>
             <p className={`connection-status connection-status--${status}`}>
               Server: {statusLabels[status]}
@@ -279,12 +315,19 @@ export function GamePage() {
           </div>
 
           <div className="lobby__qr">
+            {medalControls}
             {session ? (
               <ControllerQrCode url={getControllerUrl(session)} />
             ) : (
               <p className="lobby__pending">Se generează codul de asociere…</p>
             )}
             <div className="lobby__actions">
+              {!gameStarted && controllerConnected && status === 'connected' && (
+                <button type="button" className="ghost-button" disabled={!validTarget}
+                  onClick={() => setPhase('start')}>
+                  Continuă la start
+                </button>
+              )}
               <button type="button" className="ghost-button" onClick={handleNewCode}>
                 Cod nou
               </button>

@@ -4,6 +4,7 @@ import { GameBridge, GameState } from './bridge'
 import { PALETTE, toNumber } from './palette'
 import { BootScene } from './scenes/BootScene'
 import { WorldScene } from './scenes/WorldScene'
+import { GameOverScene } from './scenes/GameOverScene'
 import { TriviaScene } from './scenes/TriviaScene'
 import type { InputKey } from '../realtime/protocol'
 
@@ -32,10 +33,10 @@ export type GameHandle = {
   destroy: () => void
 }
 
-export function createGame(parent: HTMLElement): GameHandle {
+export function createGame(parent: HTMLElement, targetMedals = STANDS.length): GameHandle {
   let active = true
   const bridge = new GameBridge()
-  const state = new GameState(STANDS.map((stand) => stand.id))
+  const state = new GameState(STANDS.map((stand) => stand.id), targetMedals)
 
   const game: Phaser.Game = new Phaser.Game({
     type: Phaser.AUTO,
@@ -60,7 +61,7 @@ export function createGame(parent: HTMLElement): GameHandle {
         instance.registry.set('state', state)
       },
     },
-    scene: [BootScene, WorldScene, TriviaScene],
+    scene: [BootScene, WorldScene, TriviaScene, GameOverScene],
   })
 
   function handleKeyDown(event: KeyboardEvent) {

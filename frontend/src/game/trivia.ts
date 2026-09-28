@@ -23,32 +23,187 @@ export type TriviaQuestion = {
   hint: string
 }
 
-const PLACEHOLDER = (departament: string): TriviaQuestion => ({
-  question: `TODO: întrebarea de la standul ${departament}.`,
-  answers: [
-    'TODO: răspunsul 1',
-    'TODO: răspunsul 2',
-    'TODO: răspunsul 3',
-    'TODO: răspunsul 4',
-  ],
-  correct: 0,
-  hint: `TODO: indiciul afișat după un răspuns greșit la ${departament}.`,
-})
-
 export const TRIVIA: Record<StandId, TriviaQuestion> = {
-  'bal-bobocilor': PLACEHOLDER('Balul Bobocilor'),
-  polihack: PLACEHOLDER('Polihack'),
-  'sport-sanatate': PLACEHOLDER('Sport și Sănătate'),
-  'viitor-inginer': PLACEHOLDER('Viitor Inginer'),
-  infotech: PLACEHOLDER('Infotech'),
-  divertisment: PLACEHOLDER('Divertisment'),
-  imagine: PLACEHOLDER('Imagine'),
-  it: PLACEHOLDER('IT'),
-  media: PLACEHOLDER('Media'),
-  pr: PLACEHOLDER('PR'),
-  tehnic: PLACEHOLDER('Tehnic'),
-  tineret: PLACEHOLDER('Tineret'),
-  financiar: PLACEHOLDER('Financiar'),
+  // Balul Bobocilor
+  'bal-bobocilor': {
+    question: "Care este evenimentul care integrează bobocii în universitate?",
+    answers: [
+      "Viitor Inginer",
+      "InfoTech",
+      "PoliHack",
+      "Balul Bobocilor",
+    ],
+    correct: 3,
+    hint: 'Indiciu',
+  },
+
+  // Polihack
+  polihack: {
+    question: "Cum se numește competiția de 48 de ore de codat din cadrul OSUT Cluj?",
+    answers: [
+      "CodeContest",
+      "HackCode",
+      "PoliHack",
+      "PoliCode",
+    ],
+    correct: 2,
+    hint: 'Indiciu',
+  },
+
+  // Sport și Sănătate
+  'sport-sanatate': {
+    question: "Cine a castigat cupa Romaniei?",
+    answers: [
+      "Corvinul",
+      "FC Cojasca",
+      "Craiova",
+      "CNS Cetate Deva",
+    ],
+    correct: 2,
+    hint: 'Indiciu',
+  },
+
+  // Viitor Inginer
+  'viitor-inginer': {
+    question: "În câte județe prezintă Viitor Inginer?",
+    answers: [
+      "20",
+      "23",
+      "19",
+      "14",
+    ],
+    correct: 3,
+    hint: 'Indiciu',
+  },
+
+  // Infotech
+  infotech: {
+    question: "Cum se numește primul eveniment organizat de InfoTech în acest semestru ?",
+    answers: [
+      "InfoWeek",
+      "ContestNight",
+      "Training: How to start a startup?",
+      "InfoNight",
+    ],
+    correct: 3,
+    hint: 'Indiciu',
+  },
+
+  // Divertisment
+  divertisment: {
+    question: "Pe ce dată se organizează PPP?",
+    answers: [
+      "3 octombrie",
+      "1 octombrie",
+      "31 septembrie",
+      "30 septembrie",
+    ],
+    correct: 3,
+    hint: 'Indiciu',
+  },
+
+  // Imagine
+  imagine: {
+    question: "Ce format trebuie să fie un design graphic pentru a putea fi mărit fără să-și piardă din calitate?",
+    answers: [
+      "Vectorial",
+      "Screenshot",
+      "PSD",
+      "Raster",
+    ],
+    correct: 0,
+    hint: 'Indiciu',
+  },
+
+  // IT
+  it: {
+    question: "Cand a aparut prima data AI-ul?",
+    answers: [
+      "Mihai Eminescu",
+      "67",
+      "1956",
+      "Claude",
+    ],
+    correct: 2,
+    hint: 'Indiciu',
+  },
+
+  // Media
+  media: {
+    question: "Din ce e făcut semnul media?",
+    answers: [
+      "Lemn",
+      "Mâini",
+      "Lentile",
+      "Lame",
+    ],
+    correct: 1,
+    hint: 'Indiciu',
+  },
+
+  // PR
+  pr: {
+    question: "Ce reprezinta logoul OSUT Cluj?",
+    answers: [
+      "Cometa",
+      "O minge",
+      "Ou tati",
+      "Un leu",
+    ],
+    correct: 0,
+    hint: 'Indiciu',
+  },
+
+  // Tehnic
+  tehnic: {
+    question: "Care este vorba departamentului?",
+    answers: [
+      "Mai bine muncesc decât să cerșesc!",
+      "DAAAAANNIIIIIIIIIIII",
+      "Tehniku nu doarme!",
+      "Unde poți pune sârmă e păcat să pui șurub!",
+    ],
+    correct: 3,
+    hint: 'Indiciu',
+  },
+
+  // Tineret
+  tineret: {
+    question: "Ce a organizat tineretul?",
+    answers: [
+      "Untold",
+      "ZUT",
+      "Bech Please",
+      "Tumorou Land",
+    ],
+    correct: 1,
+    hint: 'Indiciu',
+  },
+
+  // Financiar
+  financiar: {
+    question: "Cat costa o tigaie Tefal in magazinele din Giurgiu?",
+    answers: [
+      "Horia Brenciu",
+      "42.67 lei",
+      "8500 forintz",
+      "40 lei",
+    ],
+    correct: 3,
+    hint: 'Indiciu',
+  },
+  // Educațional
+  educational: {
+    question: "Care este Biblia UTCN",
+    answers: [
+      "Regulamentul de Burse",
+      "CARTA",
+      "CDOS",
+      "ECTS",
+    ],
+    correct: 1,
+    hint: 'Indiciu',
+  },
 }
 
 export const COOLDOWN_MS = 10_000

@@ -528,3 +528,27 @@
   background: rgb(17 19 24 / 92%);
   text-align: center;
 }
+
+.medal-target {
+  border: 1px solid #64748b;
+  border-radius: 0.75rem;
+  padding: 0.75rem;
+  margin: 0 0 0.75rem;
+}
+.medal-target__presets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.medal-target button[aria-pressed="true"] {
+  background: #ffcb3d;
+  color: #111318;
+  border-color: #ffcb3d;
+}
+.medal-target label { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
+.medal-target input { width: 5rem; padding: 0.4rem; font: inherit; }
+.medal-target:disabled { opacity: 0.65; }
+.game-start-controls { width: min(32rem, calc(100% - 2rem)); max-height: 90dvh; overflow: auto; }
+.game-replay { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); }
