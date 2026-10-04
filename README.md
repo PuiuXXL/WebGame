@@ -1,375 +1,487 @@
-# Pisica din campus — OSUT UTCN Observator
+# Pisica din campus (Campus Cat)
 
-Un joc 2D top-down care rulează pe un ecran mare (laptop/proiector) și se
-joacă de pe telefon. Telefonul devine controller scanând un cod QR; nu se
-instalează nimic.
+A browser-based, top-down 2D game for OSUT at the UTCN Observator campus. The game runs on a laptop, large display, or projector, while a phone becomes the controller by scanning a QR code. Players do not need to install an app.
 
-**Scopul jocului:** plimbi o pisică prin campusul Observator, te oprești la
-standurile OSUT, răspunzi corect la trivia și strângi toate cele 13 medalii.
+Explore the campus as a cat, visit OSUT stands, answer trivia questions, and collect medals. There are currently **14 stands**. Before starting a round, the host chooses a medal target: **4, 8, or 14** using presets, or any whole number from **1 to 14**.
 
----
+The application UI, trivia content, and map editor currently use Romanian. This README documents the project in English.
 
-## Cum pornești
+## Contents
 
-Ai nevoie de [Go ≥ 1.23](https://go.dev/dl/) și [Node ≥ 20](https://nodejs.org/).
+- [Features](#features)
+- [Technology and Architecture](#technology-and-architecture)
+- [Requirements](#requirements)
+- [Local Setup](#local-setup)
+- [Configuration](#configuration)
+- [Gameplay](#gameplay)
+- [Project Structure](#project-structure)
+- [Realtime Protocol](#realtime-protocol)
+- [Campus Map and Editor](#campus-map-and-editor)
+- [Trivia Customization](#trivia-customization)
+- [Graphics and Customization](#graphics-and-customization)
+- [Commands and Verification](#commands-and-verification)
+- [Production Deployment](#production-deployment)
+- [Troubleshooting](#troubleshooting)
+- [Current Limitations](#current-limitations)
 
-**Terminal 1 — serverul realtime:**
+## Features
+
+- QR pairing between the game display and a mobile D-pad controller.
+- Four-direction movement and an action button, plus keyboard input during gameplay.
+- A campus with dormitories, OSUT offices, roads, gates, fences, sports areas, a cinema area, parking, and surrounding woodland.
+- Four-answer trivia, hints, wrong-answer markers, and per-stand retry cooldowns.
+- Configurable medal targets, a completion screen, and replay.
+- Live movement-speed adjustment, remembered in the browser.
+- Pairing-code rotation for handing the game over to another player.
+- WebSocket reconnection, server keepalive, and input resets after connection changes.
+- A browser map editor that writes layout data directly into the source tree.
+- Map rendering, geometry validation, frontend tests, and backend tests.
+
+## Technology and Architecture
+
+| Layer | Implementation |
+| --- | --- |
+| Application UI | React 19, TypeScript, React Router 7 |
+| Game engine | Phaser 3 with Arcade Physics |
+| Frontend tooling | Vite 8, TypeScript 6, ESLint 10 |
+| QR rendering | `qrcode.react` |
+| Backend | Go 1.23, `github.com/coder/websocket` |
+| Tests | Node.js built-in test runner and Go testing package |
+| Map tools | Node.js TypeScript scripts and a local HTTP editor server |
+
+The phone sends button presses and releases to the Go backend over WebSocket. The backend validates messages and relays them to the game display. **Simulation, collisions, trivia, and medal progress run in the game browser**, not on the backend.
+
+React manages routing, pairing, connection status, and host controls. Phaser manages gameplay scenes. `GameBridge` connects them: the game loop reads mutable input objects, while coarse status updates such as medal counts are published to React. `GameInput` preserves quick taps so presses between frames can still be sampled.
+
+Each backend process has one shared hub with **one game connection and one controller connection**. There are no independent rooms for multiple simultaneous games.
+
+## Requirements
+
+- **Go 1.23 or newer**, as declared in [backend/go.mod](backend/go.mod).
+- **Node.js 22.18 or newer recommended**, with npm. Use a release supporting native TypeScript execution because the map commands execute `.ts` scripts directly. Tests also use `--experimental-strip-types`.
+- Modern desktop and mobile browsers with WebSocket support.
+- A network that lets the phone reach the computer's frontend address.
+- An installed Chrome or Microsoft Edge executable recognized by `render-map.ts` for blueprint rendering.
+
+## Local Setup
+
+These examples use PowerShell and start from the repository root. Replace `192.168.1.20` with the computer's actual LAN IP address; `ipconfig` can help identify it.
+
+### 1. Start the backend
+
+In the first terminal:
 
 ```powershell
 cd backend
 go mod download
-go run ./cmd/server          # ascultă pe :8080
+$env:PORT = "8080"
+$env:ALLOWED_ORIGINS = "localhost:5173,127.0.0.1:5173,192.168.1.20:5173"
+go run ./cmd/server
 ```
 
-**Terminal 2 — aplicația web:**
+The backend listens on all interfaces on port `8080` by default.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `/ws` | WebSocket connections for game and controller |
+| `/healthz` | JSON health response: `{"status":"ok"}` |
+
+The backend reads process environment variables. **It does not automatically load a `.env` file**, including the provided `backend/.env.example`.
+
+### 2. Start the frontend
+
+In another terminal, starting from the repository root:
 
 ```powershell
 cd frontend
-npm install
-# Copiază .env.example în .env și setează VITE_PUBLIC_APP_URL cu adresa ta LAN.
-npm run dev                 # Vite ascultă și pe adresa LAN prin server.host
+npm ci
+Copy-Item .env.example .env
 ```
 
-**Pe laptop:** deschide `http://<IP-ul-tău-din-rețea>:5173/game`
+Edit `frontend/.env`:
 
-`frontend/.env` controlează adresele:
-
-- `VITE_PUBLIC_APP_URL`: originea publică accesibilă telefonului, cu protocol și port, fără `/game`. QR-ul folosește `/controller?s=<cod>`, iar WebSocket-ul derivă aceeași adresă cu `/ws` și protocolul `ws`/`wss`.
-- `BACKEND_URL`: adresa internă a serverului Go, folosită doar de proxy-ul Vite local. Exemplul implicit din `.env.example` este `http://127.0.0.1:8080`. Dacă schimbi `PORT` la backend, actualizează și această variabilă.
-- `VITE_REALTIME_URL`: opțional, doar când WebSocket-ul public este găzduit separat.
-
-Deschide monitorul folosind aceeași adresă LAN din `VITE_PUBLIC_APP_URL`, urmată de `/game`; telefonul trebuie să poată accesa acea adresă. Dacă deschizi monitorul pe `localhost`, WebSocket-ul va folosi tot adresa publică din `.env`, deci configurează `ALLOWED_ORIGINS` în mediul procesului Go pentru a permite și originea monitorului (de exemplu `localhost:5173`). Serverul Go citește variabilele din mediul procesului; nu încarcă automat un fișier `.env`.
-
-**Flow:** monitorul deschide `/game` și afișează QR-ul → telefonul deschide `/controller?s=<cod>` → după asocierea WebSocket, monitorul navighează automat la `/game/start` → ACȚIUNE pe telefon deschide `/game/play`. Conexiunea și sesiunea rămân aceleași între cele trei rute.
-
-După pornire, săgețile/WASD și Space/Enter funcționează și pe monitor. În lobby și pe ecranul de start, harta este oprită și nu primește comenzi.
-
-**Hosting:** setează `VITE_PUBLIC_APP_URL=https://<domeniul-tău>` înainte de build sau las-o goală pentru a folosi domeniul paginii. Serverul de hosting trebuie să servească `index.html` pentru rutele aplicației și să trimită `/ws` către serverul Go, cu suport WebSocket. Proxy-ul din `vite.config.ts` este pentru dezvoltare, nu este inclus în fișierele statice din build. Repornește Vite după schimbarea `.env`; pentru producție refă buildul. Dacă WebSocket-ul are alt domeniu, configurează și `VITE_REALTIME_URL` și originile permise pe backend.
-
----
-
-## Cum se joacă
-
-| Buton | În hartă | În ecranul de trivia |
-|---|---|---|
-| SUS / JOS / STÂNGA / DREAPTA | mișcare | alege răspunsul 1 / 3 / 4 / 2 |
-| ACȚIUNE | deschide standul de lângă tine | ieși înapoi pe hartă |
-
-Răspunsurile sunt legate direct de direcții, pentru că butonul de acțiune e
-rezervat pentru ieșire — nu există un buton separat de confirmare. Fiecare
-răspuns își afișează săgeata pe ecran:
-
-```
-▲  1. ...        ◀  4. ...
-▶  2. ...        ▼  3. ...
+```dotenv
+VITE_PUBLIC_APP_URL=http://192.168.1.20:5173
+VITE_REALTIME_URL=
+BACKEND_URL=http://127.0.0.1:8080
 ```
 
-**Răspuns greșit:** rândul rămâne marcat cu roșu pentru tot jocul, apare un
-indiciu și ai 10 secunde de cooldown în care nu mai poți încerca. Poți ieși și
-te poți plimba în timpul cooldown-ului.
-
-**Răspuns corect:** primești o medalie, iar deasupra standului apare o **bifă
-verde** — singurul semn care există peste standuri. Stă lăsată pe copertină și
-se ridică deasupra doar când intri în raza de interacțiune, ca să nu umple harta
-cu bife plutitoare. Cât timp un stand n-a fost
-rezolvat n-are nimic deasupra: harta rămâne curată, iar ce ai terminat se vede
-dintr-o privire. Contorul e sus-stânga pe canvas și în bara de deasupra jocului.
-
-Că un stand are o întrebare afli mergând la el — când intri în rază apare
-îndemnul „ACȚIUNE · deschide".
-
----
-
-## Butoanele din bara de sus
-
-| Buton | Ce face |
-|---|---|
-| **Reset joc** | șterge tot progresul și repornește harta de la intrarea de sud |
-| **Cod nou (QR)** | generează alt cod de asociere, **deconectează telefonul curent** și te duce la ecranul de conectare |
-| **Ecran conectare** | arată codul QR fără să schimbe nimic; jocul rămâne exact unde era |
-| **Viteză** | slider de la `0.4×` la `2.5×`; butonul „Normal" îl duce înapoi la `1.0×` |
-
-Viteza se aplică imediat și se ține minte între sesiuni (`localStorage`). Valoarea
-de bază e 290 de unități pe secundă, iar sliderul o înmulțește — deci `2×` înseamnă
-580. Ca și input-ul, trece prin `bridge`, nu prin state-ul React: un `setState`
-la fiecare pixel de tras ar re-randa pagina în timpul jocului.
-
-„Cod nou” e butonul pentru schimbul de jucători: vechiul link devine invalid pe
-loc, deci cine a jucat înainte nu mai poate interveni.
-
----
-
-## Harta
-
-Reconstruită după planul desenat de mână al campusului Observator. Două alei
-paralele străbat campusul pe toată lungimea: un rând de clădiri între ele și un
-rând dedesubt. Spre est terenul urcă — spina principală coteşte spre nord-est pe
-lângă Căminul 2 și Căminul 1 către poarta de est, iar o ramură coboară spre
-sud-est la poarta de sud.
-
-```
-┌─────────────── gard ────────────────┐         ╭─ Cămin 1 ─╮
-│ Sediu OSUT    ALEEA DE NORD         │        Cămin 2      ╰── poarta est
-│  Pașnic · proiecții · C6 · C4       │
-│────────── ALEEA CENTRALĂ ───────────┴───╮     sport · cantina
-│  fotbal · sport · C7 · C5 · C3          │         parcare
-└─────────────── gard ────────────────────┴── poarta sud
-```
-
-Tot campusul e **împrejmuit cu gard**, nu cu drum — dar gardul **nu e un singur
-inel**. E o listă de ziduri independente, fiecare cu unghiul lui:
-
-- **Gardul campusului** — un zid deschis care înconjoară tot, dar **se oprește
-  de o parte și de alta a străzii de vest**, ca să poți ieși spre Sediul OSUT
-- **Gardul Sediului OSUT** — împrejmuiește buzunarul de vest pe nord, vest și
-  sud, și rămâne deschis spre est, pe unde intră aleea de acces
-
-Un zid **deschis** are două capete și acolo se trece; unul **închis** împrejmuiește
-și ține decorul înăuntru. Deschiderea pentru o poartă se taie automat din zidul
-de lângă ea, dar nu e obligatorie — un zid poate pur și simplu să se termine.
-
-Intrări:
-
-- **3 intrări principale:** Ceahlău (vest, în deschizătura dintre cele două
-  garduri), Observatorului (sud), est
-- **2 intrări secundare:** dinspre nord, prin spațiile dintre cămine
-
-Laturile pot sta oblic. Fiecare bucată de zid între două porți devine un
-dreptunghi de coliziune dacă e dreaptă, sau o scară de dreptunghiuri dacă e
-înclinată — același mecanism ca la clădirile rotite.
-
-### Editorul de hartă
+Then start Vite:
 
 ```powershell
-npm run map:edit     # → http://localhost:5174
+npm run dev
 ```
 
-Deschizi în browser și **muți obiectele cu mouse-ul peste fotografia aeriană a
-campusului**. Când apeși Salvează, scrie direct în
-[`campus.layout.ts`](frontend/src/game/campus.layout.ts) — nu trebuie să copiezi
-nimic. Păstrează și un `.bak` cu versiunea anterioară.
+Vite accepts LAN connections and proxies `/ws` to the backend. With this setup, the phone only needs access to frontend port `5173`.
 
-| Acțiune | Cum |
-|---|---|
-| Mută un obiect | trage de el |
-| Redimensionează | trage de colțul din dreapta-jos |
-| **Mută o singură aripă** | **trage de ea** (asta e acum comportamentul normal) |
-| **Mută tot blocul** | **trage de pătratul din centrul lui**, sau `Ctrl` + trage |
-| Rotește tot blocul | trage de bila albastră de deasupra lui |
-| Rotește o singură aripă | selecteaz-o, apoi trage de bila verde din stânga ei |
-| Aripă nouă / dublează / șterge | butoanele din panoul de proprietăți |
-| **Drum nou** | **`+ Drum nou`**, apoi clic pentru fiecare vârf; termini din bara de sus |
-| **Gard nou** | **`+ Gard nou`**, la fel; în proprietăți îl faci închis sau îl ștergi |
-| **Pădure nouă** | **`+ Pădure nouă`**, apoi **tragi un dreptunghi** pe hartă |
-| **Schimbă un nume** | **dublu-clic pe el pe hartă**; `Enter` salvează, `Esc` renunță |
-| **Mută un nume** | **trage de el**; în proprietăți ai „Nume la loc" ca să-l readuci |
-| **Text pe firma porții** | câmpul „Text pe firmă" din proprietățile porții |
-| Vârf nou pe un drum | dublu-clic pe drum |
-| Șterge un vârf | clic-dreapta pe el |
-| Șterge drumul | butonul din panoul de proprietăți |
-| Aliniază fotografia | „Încadrează în lume", apoi `Shift` + trage |
-| Pan / zoom | `spațiu`+trage sau butonul din mijloc / rotița |
-| Fără snap | ține `Alt` |
-| Undo / Salvează | `Ctrl+Z` / `Ctrl+S` |
+### 3. Pair and play
 
-Cât desenezi, sus apare o bară cu numărul de vârfuri și trei butoane:
-**− ultimul vârf**, **Gata** și **Renunță**. „Gata" stă blocat până ai cel puțin
-două vârfuri, ca să nu rămână un drum dintr-un punct. (`Enter` și `Esc` fac
-același lucru, dacă preferi tastatura.)
+1. Open `http://192.168.1.20:5173/game` on the computer.
+2. Choose the round's medal target in the lobby.
+3. Scan the QR code with the phone to open `/controller?s=<pairing-token>`.
+4. When the controller connects, the game display navigates to `/game/start`.
+5. Press **ACTION** on the phone to enter `/game/play`.
 
-### Pădurea din jur
+The game-page component and connection remain mounted across these phases. Existing gameplay is paused while the canvas is hidden in the lobby or start screen. The target becomes fixed when the round's game instance is created.
 
-Lumea se întinde cu 900 de unități dincolo de gard în toate direcțiile, iar
-marginea aia e umplută cu pădure — altfel harta s-ar termina în gazon plat exact
-acolo unde se oprește jucătorul. Sunt patru centuri (`pădure-nord`, `-sud`,
-`-vest`, `-est`), dar poți adăuga oricâte: `+ Pădure nouă` și tragi un
-dreptunghi.
+Use the LAN address on both devices. A QR URL containing `localhost` points to the phone itself, not the computer.
 
-O pădure e **doar decor** — n-are coliziune, fiindcă gardul e cel care oprește
-pisica. În joc dreptunghiul nu se vede: podeaua e tăiată cu o margine
-festonată, iar copacii se răresc spre exterior, așa că linia arborilor arată
-neregulat. Copacii de pădure se sortează pe adâncime ca orice alt obiect, deci
-au relief când îi privești dinspre campus.
+## Configuration
 
-Densitatea e reglată din `spacing` în `FOREST_TREES` (`campus.ts`). E și un
-buton de performanță: fiecare copac e un sprite prin care trece sortarea la
-fiecare cadru. La 132 ies ~1100 de copaci; la 96 ieșeau ~2100.
+### Frontend
 
-Copacii împrăștiați normal ocolesc pădurile, ca să nu se dubleze.
+See [frontend/.env.example](frontend/.env.example).
 
-### Numele de pe hartă
+| Variable | Purpose |
+| --- | --- |
+| `VITE_PUBLIC_APP_URL` | Public HTTP/HTTPS origin used for the controller QR and default WebSocket address. Include a port if needed, but no path, query, credentials, or fragment. Empty means use the current page's origin. |
+| `VITE_REALTIME_URL` | Optional full `ws://` or `wss://` endpoint for a separately hosted realtime service. Empty means derive `/ws` from the public app origin. |
+| `BACKEND_URL` | Internal destination for Vite's local WebSocket proxy, normally `http://127.0.0.1:8080`. Not exposed to browsers. |
 
-Numele căminelor, zonelor, standurilor și porților se schimbă cu **dublu-clic
-direct pe text**, nu doar din câmpul „Nume" al panoului. Se deschide o casetă
-fix acolo unde stă numele, precompletată.
+An HTTP app origin derives a `ws://` endpoint; HTTPS derives `wss://`. Vite's serve configuration requires either `BACKEND_URL` or `VITE_REALTIME_URL`.
 
-Numele sunt așezate automat — al unei clădiri deasupra blocului, al unei zone
-deasupra ei — ceea ce e bine până când două se suprapun. Atunci **tragi de nume**
-și se salvează un `labelOffset`, o abatere față de poziția automată. Butonul
-„Nume la loc" o șterge.
+Restart Vite after changing environment files. Production `VITE_*` values are embedded during compilation and require a new build when changed. They are public configuration, not secrets.
 
-Poziția automată e calculată într-un singur loc — `buildingLabelAnchor`,
-`zoneLabelAnchor` și `gateLabelAnchor` din `campus.ts` — folosit de joc și de
-`npm run map`, iar editorul îl oglindește cifră cu cifră. Contează: înainte
-fiecare așeza numele în felul lui (editorul punea numele clădirii în centrul
-blocului, jocul deasupra lui; la porți editorul folosea o abatere care se
-schimba cu zoom-ul), așa că ce aliniai în editor ateriza în altă parte în joc.
+### Backend
 
-Când ești depărtat, numele sunt mărite ca să rămână lizibile — **punctul
-galben** e locul exact unde le așază jocul. Trasul numelui nu se aliniază la
-grila hărții: o abatere de câțiva pixeli n-ar fi posibilă în pași de 20.
+See [backend/.env.example](backend/.env.example).
 
-Standurile fac excepție: numele lor e pictat pe pancarda standului, deci se
-poate rescrie, dar nu mutat. La fel și **firma porții** — scrie
-`UTCN · OBSERVATOR` implicit, dar fiecare poartă își poate avea textul ei, iar
-dacă e prea lung se micșorează singur ca să încapă pe tăbliță.
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PORT` | `8080` | HTTP and WebSocket listening port. |
+| `ALLOWED_ORIGINS` | Unset | Comma-separated host patterns for additional permitted WebSocket origins, such as `localhost:5173,192.168.1.20:5173`. Same-origin acceptance is handled by the WebSocket library. |
 
-Un drum nou primește singur un id liber (`drum-1`, `drum-2`…), lățime 110 și
-suprafață `paved`; le schimbi în panoul de proprietăți. Id-ul contează: lămpile
-și băncile din `campus.ts` își caută aleea după id, iar două drumuri cu același
-id ar trimite decorul pe cel greșit — de-aia atât editorul cât și `map:check`
-semnalează acum id-urile dublate și drumurile cu mai puțin de două vârfuri.
+Set variables in the shell or deployment environment launching Go. If the monitor opens `localhost` while the configured public origin is a LAN address, allow the monitor's origin too. If realtime uses a separate domain, allow the frontend's public host.
 
-Panoul „Verificare" din stânga rulează în timp real aceleași reguli ca
-`npm run map:check`, deci vezi suprapunerile **în timp ce** muți, nu după.
+## Gameplay
 
-`campus.layout.ts` conține doar date. Tipurile și tot ce se calculează din
-poziții (copaci, lămpi, bănci, mașini) stau în `campus.ts`, pe care editorul nu-l
-atinge.
+### Player controls
 
-### Căminele sunt înclinate
+| Phone button | On the map | In trivia |
+| --- | --- | --- |
+| Up | Move up | Select answer 1 |
+| Right | Move right | Select answer 2 |
+| Down | Move down | Select answer 3 |
+| Left | Move left | Select answer 4 |
+| ACTION | Open a nearby stand | Return to the map |
 
-Căminele din Observator nu stau drept față de alei, așa că fiecare clădire are un
-câmp `rotation` — grade, în sensul acelor de ceasornic, în jurul centrului
-blocului. Aripile rămân drepte în date și se rotește tot blocul, deci un cămin în
-L își păstrează forma când îl întorci. Acum toate cele 7 cămine sunt la `-10°`.
+Directional presses submit answers immediately; there is no separate confirmation button.
 
-**Aripile nu trebuie să se atingă.** Fiecare aripă e o clădire în sine pentru
-motor: are textura ei, unghiul ei și adâncimea ei, deci poți depărta două aripi
-oricât și pisica trece printre ele sortându-se corect față de fiecare. Când
-selectezi un cămin, o linie punctată arată ce aripi îi aparțin, iar aripile
-apar și în lista din stânga, ca să le poți alege pe nume.
+During active gameplay, the computer also accepts **arrow keys or WASD**, with **Space or Enter** for ACTION. Pairing and the phone's ACTION button are used for normal startup; keyboard controls are available once gameplay starts.
 
-Fiecare **aripă** are la rândul ei un `rotation` propriu, aplicat în jurul
-centrului ei *înainte* de rotația blocului. Căminele reale nu sunt L-uri
-perfecte — cele două aripi se întâlnesc la ~105°, nu la 90 — așa că forma de
-„V întors” (∧) din fotografie se face doar cu unghi separat pe fiecare aripă.
-În fotografie aripa lungă e pe la −43°, iar întoarcerea pe la +32°.
+### Trivia and completion
 
-Bila **albastră** de deasupra clădirii rotește blocul; selectezi o aripă și
-bila **verde** din stânga ei o rotește doar pe ea. Sau scrii valorile în panoul
-de proprietăți. `Alt` în timpul rotirii = zecimi de grad.
+- Enter a stand's interaction radius to see the open prompt. The radius is currently `110` world units.
+- A wrong answer stays marked for the round, reveals the hint, and starts a **10-second cooldown** at that stand. Players may leave and explore while waiting.
+- A correct answer awards one medal for that stand and displays a green completion marker.
+- Reaching the chosen medal target opens the completion scene.
+- Medal counts appear in both the game HUD and host toolbar.
 
-Cât timp ceva e întors, mutarea și redimensionarea se fac după axele *lui*, nu
-după cele ale hărții — tragi de-a lungul zidului, nu pe orizontală. Aripile
-rămân drepte în date; se rotesc doar la desenare și la coliziuni, deci poți
-oricând pune unghiul înapoi pe 0 fără să pierzi dimensiunile.
+### Host controls
 
-Coliziunile nu se pot roti în Arcade Physics, așa că o clădire întoarsă e
-acoperită cu o scară de dreptunghiuri verticale (`buildingColliders` în
-`campus.ts`). La `-10°` ies 23 de dreptunghiuri per cămin și cu ~12% mai multă
-suprafață decât forma reală: pisica se oprește câțiva pixeli mai devreme la un
-colț, ceea ce e greșeala bună dintre cele două posibile.
+| Control | Behavior |
+| --- | --- |
+| Medal target | Choose 4, 8, or 14, or enter an integer from 1 to 14 before starting. Locked during a round. |
+| Reset game | Destroy the current game instance and clear progress. Return to the start screen if a phone is connected, otherwise to the lobby. |
+| New QR code | Rotate the pairing token, disconnect the old controller, release input, and return to the lobby. Existing round progress is retained. |
+| Connection screen | Display the lobby and pause the game. The return-to-game control resumes the retained round. |
+| Speed | Adjust from `0.4x` to `2.5x`; Normal restores `1.0x`. |
+| Play again | Reset after completion and prepare another round. |
 
-Atenție la spațiu: la unghiuri mari un bloc de 560 de unități ajunge să ocupe
-~550 pe verticală, iar rândurile dintre alei au acum 374–495. Panoul
-„Verificare” îți spune imediat dacă ai ieșit pe alee sau peste un stand.
+The world's base speed is `290` units per second, multiplied by the slider value. Speed is stored in `localStorage` under `pisica:speed-scale`.
 
-### Cum verifici harta după ce o modifici
+**Round progress is in memory only.** Reloading the game page loses medals, wrong-answer markers, hints, and cooldowns. Generating a new QR code and resetting a round are separate operations.
+
+## Project Structure
+
+```text
+backend/
+  cmd/server/main.go             HTTP routes, environment config, shutdown
+  internal/realtime/
+    message.go                   Protocol definitions and validation
+    hub.go                       Active peers, session tokens, input relay
+    handler.go                   Handshake, read loop, keepalive
+    client.go                    Outgoing message queue and socket writes
+    *_test.go                    Backend tests
+  .env.example
+  go.mod
+  go.sum
+
+frontend/
+  src/
+    App.tsx                      Application routes
+    config/                      App and realtime URL resolution
+    components/                  QR and controller button components
+    pages/
+      GamePage.tsx               Active host, phases, and round controls
+      GameStartPage.tsx          Start-screen content
+      ControllerPage.tsx         Mobile controller
+    realtime/
+      protocol.ts                Typed messages and incoming validation
+      RealtimeClient.ts          Socket lifecycle and reconnection
+      useRealtimeClient.ts       React integration
+    game/
+      index.ts                   Active Phaser factory and keyboard input
+      GameInput.ts               Held input and quick-tap handling
+      bridge.ts                  React/Phaser bridge and round state
+      campus.layout.ts           Editor-managed layout data
+      campus.ts                  Map types, geometry, derived scenery
+      trivia.ts                  Questions, answers, hints, cooldown
+      palette.ts                 Procedural graphics colors
+      textures.ts                Canvas-generated environment textures
+      catAnimations.ts           Cat loading and animation frames
+      assets/cat/                Cat PNG artwork and walking sheets
+      entities/Player.ts         Movement and animations
+      scenes/BootScene.ts        Assets, textures, animation setup
+      scenes/WorldScene.ts       Campus, collisions, interaction, HUD
+      scenes/TriviaScene.ts      Trivia UI and answer processing
+      scenes/GameOverScene.ts    Completion screen
+      scenes/Gameover.png        Completion artwork
+    assets/                      Application artwork
+  scripts/
+    check-map.ts                 Layout validation
+    render-map.ts                Blueprint generation
+    map-editor/
+      server.ts                  Editor server and save endpoints
+      editor.html                Browser editor
+      refs/                      Aerial, plan, and OSM references
+  tests/                         Input, bridge, URL, reachability tests
+  public/                        Public icons
+  .env.example
+  package.json
+  vite.config.ts
+```
+
+Alternate modules such as `createGame.ts`, `GameScene.ts`, `GameSessionLayout.tsx`, and `PlayingPage.tsx` also exist. The current routed campus experience uses `GamePage.tsx` and the factory exported by `game/index.ts`.
+
+## Realtime Protocol
+
+Messages are JSON objects over `/ws`. Definitions are maintained in [message.go](backend/internal/realtime/message.go) and [protocol.ts](frontend/src/realtime/protocol.ts).
+
+1. The first message must be a `join` within **10 seconds**, specifying role `game` or `controller`.
+2. The game receives a server-generated pairing token. Reconnecting with the current token can preserve it.
+3. Controllers must present the current token. Missing or stale tokens are rejected with close code **1008**.
+4. A new connection for an occupied role replaces the previous connection.
+5. The server reports peer status and relays controller input to the game.
+
+Example game handshake:
+
+```json
+{"type":"join","role":"game"}
+```
+
+Controller handshake:
+
+```json
+{"type":"join","role":"controller","session":"<pairing-token>"}
+```
+
+Button press and release:
+
+```json
+{"type":"input","key":"up","pressed":true}
+{"type":"input","key":"up","pressed":false}
+```
+
+| Type | Direction | Purpose |
+| --- | --- | --- |
+| `join` | Client to server | Identify role and session token. |
+| `input` | Controller to server to game | Press/release `up`, `down`, `left`, `right`, or `action`. |
+| `input_reset` | Controller to server to game; also server to game | Release held input. A controller reset message must contain no additional fields. |
+| `new_session` | Game to server | Rotate the token and disconnect the previous controller. |
+| `session` | Server to game | Deliver the pairing token in `session`. |
+| `status` | Server to client | Report connection and peer state. |
+| `error` | Server to client | Send an error `code` and explanatory `message`. |
+
+Status values are `connected`, `controller_connected`, `controller_disconnected`, `game_connected`, and `game_disconnected`.
+
+Tokens contain **16 cryptographically random bytes**, encoded as URL-safe Base64. Incoming WebSocket messages have a **4 KiB read limit**. Keepalive pings run every **15 seconds**, with a **10-second pong timeout**.
+
+The frontend retries ordinary disconnects with exponential backoff and jitter, with the base delay capped at 15 seconds. Policy rejections require resolving the pairing issue. Controller replacement, disconnection, focus loss, and visibility changes have input release/reset handling.
+
+Pairing tokens authorize the controller. The game-screen role has no separate host authentication.
+
+## Campus Map and Editor
+
+### Map data and geometry
+
+[campus.layout.ts](frontend/src/game/campus.layout.ts) stores world dimensions, spawn position, buildings and wings, roads, stands, zones, fences, gates, and forests. The current world is **8580 x 4060 units**.
+
+[campus.ts](frontend/src/game/campus.ts) defines types and derives collision geometry, label anchors, trees and bushes, roadside lamps and benches, and parked cars.
+
+- Buildings support whole-block rotation and independent wing rotation. Wings can be separated to allow passage between them.
+- Rotated solids use axis-aligned collision slabs because Arcade Physics bodies are not rotated polygons.
+- Fences are independent open or closed polylines. Nearby gates cut openings; open fence endpoints can also leave passages.
+- Forest rectangles generate decorative woodland and have no solid colliders.
+- Building, zone, and gate names support `labelOffset`. Stand names are painted on banners; gate signs have separately editable text.
+- Roads require unique IDs and at least two vertices. Roadside decoration refers to road IDs, so renaming roads may require updating `campus.ts`.
+
+### Open the editor
+
+From `frontend/`:
 
 ```powershell
-npm run map          # desenează harta în scripts/out/campus.png
-npm run map:check    # caută suprapuneri, drumuri blocate, standuri izolate
+npm run map:edit
 ```
 
-`map` randează schema hărții (gard, drumuri, clădiri, zone, standuri, porți, pe
-grilă de 500) într-un PNG, folosind Chrome sau Edge deja instalat. `map:check`
-răspunde la altă întrebare: dacă layout-ul e *legal*. Cele două prind lucruri
-diferite — randarea a prins o alee care se termina în iarbă, verificatorul a
-prins standuri parcate fix pe axul aceleiași alei. Rulează-le pe amândouă.
+Open `http://localhost:5174`. The editor uses reference images in `scripts/map-editor/refs/`. Its local API exposes `GET /api/layout` to read and `POST /api/layout` to save.
 
-Lumea are 6300×1820. Ca să muți ceva, folosește editorul (sau, la nevoie,
-[`campus.layout.ts`](frontend/src/game/campus.layout.ts) direct) — coliziunile,
-etichetele, gardul și decorul se recalculează din el. Copacii și tufele sunt împrăștiate prin rejection
-sampling față de aceleași date, deci nu ajung niciodată într-un perete.
+Saving rewrites **only `src/game/campus.layout.ts`** and preserves a one-step backup at `campus.layout.ts.bak`. It does not rewrite `campus.ts`. This file-writing tool is intended for local development, not public hosting.
 
-Capetele unui gard deschis sunt marcate cu bulină **portocalie** în editor —
-acolo se întrerupe zidul, deci se vede dintr-o privire unde rămâne trecere.
+| Operation | Interaction |
+| --- | --- |
+| Move an object or individual wing | Drag it. |
+| Resize | Drag the lower-right handle. |
+| Move an entire building | Drag its center square or Ctrl-drag. |
+| Rotate a building | Drag the blue handle. |
+| Rotate a wing | Select it and drag the green handle. |
+| Add, duplicate, delete a wing | Use the properties panel. |
+| Add a road or fence | Choose the add command, click vertices, and finish with at least two vertices. |
+| Add a forest | Choose the add command and drag a rectangle. |
+| Rename a label | Double-click the text; Enter saves and Esc cancels. |
+| Move a label | Drag it; restore its automatic anchor in properties. |
+| Edit a gate sign | Use the sign field in properties. |
+| Add a road vertex | Double-click the road. |
+| Remove a vertex | Right-click it. |
+| Align the reference | Fit it to the world, then Shift-drag. |
+| Pan/zoom | Space-drag or middle-button drag; mouse wheel to zoom. |
+| Disable snapping | Hold Alt. |
+| Undo/save | Ctrl+Z / Ctrl+S. |
 
-## Unde pui întrebările
+The drawing toolbar removes the last vertex, finishes, or cancels a line. The validation panel highlights issues while editing. Open fence endpoints have orange markers; label anchors are marked in yellow.
 
-Un singur fișier: [`frontend/src/game/trivia.ts`](frontend/src/game/trivia.ts).
-Un stand = un departament OSUT, 13 în total.
+### Check changes
+
+```powershell
+npm run map:check
+npm run map
+```
+
+`map:check` reports geometry issues including overlaps, road obstructions, duplicate IDs, incomplete roads, and stands too far from roads. It exits with a nonzero code if problems are found.
+
+`map` generates `scripts/out/campus.html` and `scripts/out/campus.png` using an installed browser in headless mode. Inspect the blueprint and run the reachability tests after substantial layout edits. Geometry checks do not replace playing through the map.
+
+## Trivia Customization
+
+Edit [frontend/src/game/trivia.ts](frontend/src/game/trivia.ts). Each stand has one question, exactly four answers, a zero-based correct index, and a hint:
 
 ```ts
 polihack: {
-  question: 'Întrebarea ta aici?',
-  answers: ['Primul', 'Al doilea', 'Al treilea', 'Al patrulea'],
-  correct: 0,          // 0 = răspunsul 1, 1 = răspunsul 2, ...
-  hint: 'Indiciul care apare după un răspuns greșit.',
+  question: 'Which event is a 48-hour coding competition?',
+  answers: ['Event A', 'Event B', 'PoliHack', 'Event D'],
+  correct: 2,
+  hint: 'Think of the OSUT hackathon.',
 },
 ```
 
-Acum toate cele 13 au text `TODO:` ca marcaj. `answers` trebuie să aibă exact 4
-elemente — TypeScript se plânge dacă nu.
+`correct: 0` means answer 1, `1` means answer 2, and so on. The type restricts answers to a four-item tuple and the correct index to `0 | 1 | 2 | 3`. `COOLDOWN_MS` is currently `10_000`.
 
-Cheile: `bal-bobocilor`, `polihack`, `sport-sanatate`, `viitor-inginer`,
-`infotech`, `divertisment`, `imagine`, `it`, `media`, `pr`, `tehnic`,
-`tineret`, `financiar`.
+Current stand IDs:
 
-Cheia din `trivia.ts`, id-ul din `campus.layout.ts` și uniunea `StandId` din
-`campus.ts` trebuie să se potrivească — dacă adaugi sau scoți un stand, le
-schimbi pe toate trei, altfel TypeScript se plânge.
-
-Standurile sunt așezate **pe alei**, în spațiile dintre cămine — nu în fața
-vreunei clădiri.
-
----
-
-## Cum e construit
-
-```
-backend/                      Go — releu realtime prin WebSocket
-  internal/realtime/
-    message.go                tipurile de mesaje + validare
-    hub.go                    slot joc + slot controller + codul de asociere
-    handler.go                handshake, keepalive ping, bucla de citire
-
-frontend/src/
-  realtime/                   protocol.ts, RealtimeClient.ts (reconectare), hook React
-  pages/GamePage.tsx          lobby cu QR + gazda canvas-ului + bara de control
-  pages/ControllerPage.tsx    D-pad-ul de pe telefon
-  game/
-    campus.ts                 HARTA CA DATE — clădiri, alei, standuri, copaci
-    textures.ts               TOATĂ grafica, desenată în canvas la pornire
-    palette.ts                culorile
-    bridge.ts                 puntea React ↔ Phaser + starea de joc
-    trivia.ts                 întrebările
-    scenes/BootScene.ts       generează texturile
-    scenes/WorldScene.ts      harta, pisica, standurile
-    scenes/TriviaScene.ts     ecranul de întrebări
+```text
+bal-bobocilor   polihack       sport-sanatate   viitor-inginer
+infotech       divertisment   imagine          it
+media          pr             tehnic           tineret
+financiar      educational
 ```
 
-Câteva decizii care contează dacă modifici ceva:
+Questions are populated. Many hints still use the generic Romanian text `Indiciu`; review questions, answer keys, dates, and hints before a new event.
 
-- **Nu există fișiere de imagine.** Fiecare textură — pisica, clădirile, copacii,
-  standurile — e desenată cu Canvas 2D în `textures.ts`, la boot. Schimbi culorile
-  din `palette.ts` și se schimbă peste tot.
-- **Harta e date, nu cod.** Ca să muți un cămin sau un stand, editezi
-  `campus.ts`. Coliziunile, etichetele și decorul se construiesc din el.
-- **Input-ul nu trece prin state-ul React.** Socket-ul scrie într-un obiect
-  mutabil (`bridge.input`) pe care bucla de joc îl citește în fiecare frame. Un
-  `setState` per apăsare ar consuma bugetul de frame pe re-randări.
-- **Codul de asociere e verificat pe server.** Un controller care nu prezintă
-  codul curent e refuzat la handshake, cu cod de închidere 1008.
+When adding/removing stands, update the `StandId` union in `campus.ts`, the layout's stands, and the `TRIVIA` record together. Review the medal presets in `GamePage.tsx`, which currently contain a literal `14`.
 
----
+## Graphics and Customization
 
-## Ce lipsește încă
+Most environment textures are generated with Canvas 2D in [textures.ts](frontend/src/game/textures.ts) during boot. [palette.ts](frontend/src/game/palette.ts) centralizes procedural colors. World objects use depth sorting to place the cat in front of or behind scenery.
 
-- Întrebările de trivia (placeholder-e acum, 13 departamente).
-- Sunet.
-- Mai mulți jucători simultan — hub-ul are un singur slot de controller.
+The project also uses **bitmap artwork**, including cat idle/walking PNGs, application images, map references, and completion artwork. [catAnimations.ts](frontend/src/game/catAnimations.ts) defines frame crops and timing. Walking sheets are expected to be `1774 x 887` pixels, with eight frames at 10 fps. Replacing sheets may require changing frame definitions.
 
-Analiza detaliată a arhitecturii și lista de îmbunătățiri sunt în
-[ANALYSIS.md](ANALYSIS.md).
+The active canvas has a **1280 x 720** logical resolution, with Phaser FIT scaling and centered alignment. The camera follows the player inside the larger world.
+
+| Customization | Main files |
+| --- | --- |
+| Map positions, spawn, dimensions | `campus.layout.ts`, preferably through the editor |
+| Geometry, scenery, interaction radius | `campus.ts` |
+| Environment appearance | `textures.ts`, `palette.ts` |
+| Cat appearance and animations | `assets/cat/`, `catAnimations.ts`, `entities/Player.ts` |
+| Questions and retry delay | `trivia.ts` |
+| Movement speed | `WorldScene.ts` base speed, `bridge.ts` limits |
+| Round targets and page flow | `GamePage.tsx` |
+| Completion screen | `GameOverScene.ts`, `Gameover.png` |
+| Application styles | `App.css`, `index.css`, page/component files |
+| Realtime behavior | Frontend `realtime/`, backend `internal/realtime/` |
+
+## Commands and Verification
+
+Run frontend commands from `frontend/`:
+
+| Command | Purpose |
+| --- | --- |
+| `npm ci` | Install locked dependencies. |
+| `npm run dev` | Start the LAN-accessible development server. |
+| `npm run build` | Check TypeScript projects and build assets into `dist/`. |
+| `npm run preview` | Preview the production build locally. |
+| `npm run lint` | Run ESLint. |
+| `npm test` | Run the Node.js test suite. |
+| `npm run test:input` | Run focused input tests. |
+| `npm run map:edit` | Start the editor on port 5174. |
+| `npm run map:check` | Validate layout geometry and IDs. |
+| `npm run map` | Generate blueprint HTML and PNG. |
+
+Frontend tests cover held inputs, short taps, resets, bridge actions, medal targets and completion, URL configuration, and campus reachability.
+
+Run backend commands from `backend/`:
+
+```powershell
+go test ./...
+go vet ./...
+go build -o server ./cmd/server
+```
+
+On Windows, use `-o server.exe` to give the executable an explicit Windows extension. Backend tests cover message validation, hub behavior, pairing, and WebSocket handling.
+
+For manual verification, pair a phone, start a round, press/release each direction, submit wrong and correct answers, check cooldowns, reach the target, replay, reconnect the phone, and rotate the QR code. Unit tests do not replace browser/device integration checks.
+
+## Production Deployment
+
+The application needs both a static frontend and a running Go service.
+
+1. Configure the public origin before building, for example `VITE_PUBLIC_APP_URL=https://game.example.com`. Leave it empty to use the deployed page's origin.
+2. Run `npm ci` and `npm run build` in `frontend/`, then serve `frontend/dist/`.
+3. Build/run the backend with the appropriate process environment variables.
+4. Serve `index.html` as the fallback for application routes, including `/game`, `/game/start`, `/game/play`, and `/controller`.
+5. Reverse-proxy `/ws` to Go with WebSocket upgrades and suitable long-lived connection timeouts.
+6. Use HTTPS for the frontend and WSS for realtime connections.
+
+Vite's `server.proxy` is **development-only** and is not included in the static build. Uploading `dist/` does not deploy the backend. `vite preview` is for local inspection, not production hosting; realtime connectivity must still be configured.
+
+For a separate realtime domain, set `VITE_REALTIME_URL=wss://realtime.example.com/ws` before building and allow the frontend host on the backend.
+
+Backend restarts lose pairing tokens and require fresh pairing. Multiple backend replicas do not share hub state or tokens. The game role has no separate authentication, so hosting access should reflect the intended single-display event setup.
+
+## Troubleshooting
+
+| Symptom | Checks |
+| --- | --- |
+| QR opens localhost on the phone | Set a LAN `VITE_PUBLIC_APP_URL`, restart Vite, and scan again. |
+| Phone cannot open the controller | Check IP, port, firewall, and Wi-Fi client isolation. |
+| Vite reports missing backend configuration | Set `BACKEND_URL` or `VITE_REALTIME_URL` in `frontend/.env`. |
+| WebSocket is rejected | Check allowed origins and confirm variables reached the Go process. |
+| Pairing is stale or rejected | Scan the current QR; rotated tokens invalidate old links. |
+| Production route returns 404 | Add an `index.html` fallback for SPA routes. |
+| Production UI loads but cannot connect | Check backend health, WebSocket upgrades, WSS, origins, and build-time URLs. |
+| Port 5173 is occupied | Stop the process you own or use `npm run dev -- --port 5175`; update origins. Vite uses strict port handling. |
+| Editor port 5174 is occupied | Check for an already running editor at `http://localhost:5174`. The editor port is fixed. |
+| Map scripts reject TypeScript syntax | Use Node.js with native TypeScript execution, such as the recommended 22.18+ release. |
+| Renderer cannot locate a browser | Inspect supported Chrome/Edge paths in `findBrowser()` in `render-map.ts`. |
+| Refresh loses progress | Expected: round state exists only in the game page's memory. |
+
+## Current Limitations
+
+- One active game and one controller per backend process; no independent rooms or simultaneous multiplayer.
+- No server-side gameplay authority, persistent progress, accounts, leaderboard, or database.
+- No separate authentication for the game-screen role.
+- No sound implementation in the active gameplay flow.
+- Romanian UI and trivia without a language-selection system.
+- Generic hints and event-specific content requiring editorial review.
+- A local file-writing map editor rather than a hosted content-management system.
+- No deployment automation or browser/device end-to-end test command in the current project scripts.
